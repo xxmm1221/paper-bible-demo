@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f2eee5">
+  <meta name="description" content="固定纸页、双栏对开、书侧索引与真实阅读进度。一个保留经文空间记忆的圣经阅读体验原型。">
+  <title>纸页 · 圣经阅读实验</title>
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="bible-data.js" defer></script>
+  <script src="gesture-core.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="#" aria-label="纸页，返回阅读"><span class="brand-mark">页</span><span>纸页<small>PAPER BIBLE</small></span></a>
+  <div class="edition-label">和合本 · 固定版面实验 <span>EXPERIENCE 01</span></div>
+  <button class="text-button" id="about-open">关于这本书 <span aria-hidden="true">↗</span></button>
+</header>
+<main>
+  <aside class="intro">
+    <div class="eyebrow"><i></i> 为位置记忆而设计</div>
+    <h1>记得那句话，<br>也记得<br><em>它在哪里。</em></h1>
+    <p class="lede">不是一条滚动的文字流。<br>是一本可以握住、翻动、重新找到的书。</p>
+    <div class="principles">
+      <div><span class="guide-icon">↔</span><p><strong>慢慢挪动，细细读</strong><small>轻拖移动纸页 · 捏合缩放整本书</small></p></div>
+      <div><span class="guide-icon">⌁</span><p><strong>翻动的方向，也像一本书</strong><small>左页向右翻前页 · 右页向左翻后页</small></p></div>
+      <div><span class="guide-icon">Ⅱ</span><p><strong>两根手指，翻过一叠纸</strong><small>连续快滑：5 页 → 10 页 → 20 页</small></p></div>
+    </div>
+    <div class="lab-controls"><span>用鼠标先试试</span><div><button id="demo-pan">慢拖示范</button><button id="demo-burst">双指快翻示范</button></div></div>
+    <p class="prototype-note">体验版排版 · 非实体书原版页码<br>手机与平板保留相同的经文位置</p>
+  </aside>
+  <section class="reader" aria-label="纸质圣经阅读器">
+    <div class="reader-header">
+      <button class="location" id="location-button" aria-label="选择章节"><span id="book-name">创世记</span><span class="location-ref" id="chapter-name">第 1 章</span><span aria-hidden="true">⌄</span></button>
+      <div class="view-switch" role="group" aria-label="观看方式"><button id="view-open" class="selected" aria-pressed="true">展开</button><button id="view-edge" aria-pressed="false">看书侧</button></div>
+      <button class="icon-button" id="help-open" aria-label="手势说明">?</button>
+    </div>
+    <div class="stage-wrap">
+      <div class="stage" id="stage" tabindex="0" role="region" aria-label="对开书页。拖动平移，双击放大，双指捏合缩放。左页快向右翻前页，右页快向左翻后页。">
+        <div class="surface-caption" id="surface-caption">一张固定的版面，一段熟悉的位置</div>
+        <div class="book" id="book">
+          <div class="cover cover-left"></div><div class="cover cover-right"></div>
+          <div class="page-stack left-stack" id="left-stack"></div><div class="page-stack right-stack" id="right-stack"></div>
+          <article class="paper left-paper" id="left-paper" aria-label="左页"></article>
+          <article class="paper right-paper" id="right-paper" aria-label="右页"></article>
+          <div class="gutter"></div><div class="ribbon" aria-hidden="true"></div>
+          <div class="turn-sheet" id="turn-sheet" aria-hidden="true"></div>
+        </div>
+        <div class="touch-ring" id="touch-ring" aria-hidden="true"></div>
+      </div>
+      <div class="edge-view" id="edge-view" hidden>
+        <div class="edge-heading"><span>沿着书侧，找到熟悉的一卷</span><small>黑色 · 旧约　酒红 · 新约</small></div>
+        <div class="closed-book"><div class="closed-cover"></div><div class="foreedge"><div class="cut-marker" id="cut-marker"></div><div class="index-tabs" id="index-tabs"></div></div><div class="edge-spine">圣　经<span>HOLY BIBLE</span></div></div>
+        <div class="edge-caption">点一下书卷标签，书就翻到那里。</div>
+      </div>
+      <div class="gesture-feedback" id="gesture-feedback" role="status" aria-live="polite">双击纸页，靠近一点读</div>
+      <div class="viewport-map" id="viewport-map" aria-hidden="true"><div class="map-fold"></div><div id="map-window"></div></div>
+    </div>
+    <div class="reading-tools" id="reading-tools">
+      <div class="focus-group" role="group" aria-label="阅读视角"><button id="fit-book" class="active">对开</button><button id="focus-left">左页</button><button id="focus-right">右页</button></div>
+      <div class="zoom-tools"><button id="zoom-out" aria-label="缩小">−</button><button id="zoom-value" title="恢复对开视角">100%</button><button id="zoom-in" aria-label="放大">＋</button></div>
+    </div>
+    <footer class="reader-footer">
+      <button class="nav-button" id="prev" aria-label="向前翻一页">←</button>
+      <div class="book-progress"><div class="progress-label"><span id="page-label">1 — 2</span><span id="progress-label">创世记</span></div><div class="thickness-track" title="左边是已翻过的书页，右边是尚未翻过的书页"><div class="read-block" id="read-block"></div><i id="position-pin"></i><div class="unread-block"></div></div><div class="thickness-labels"><span>已经翻过的纸页</span><span>还在右手边的纸页</span></div></div>
+      <button class="nav-button" id="next" aria-label="向后翻一页">→</button>
+    </footer>
+  </section>
+</main>
+<dialog id="about-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">关于这次实验</div><h2>位置不动，<br>只是换一种拿书的方式。</h2><p>手机上，放大并移动观看；平板横屏，完整展开两页。经文不会随屏幕宽度重新排版。</p><p>左右书页堆叠与底部厚度条对应全书位置。书侧的 66 个书卷标签都可以直接定位。</p><p class="notice">本版为参考小开本双栏风格的体验排版，并非某一印刷版的扫描复刻。后续接入你提供的扫描版，才能与实体书页码、行文位置一一对应。</p><div class="sources"><a href="https://www.bibleinmylanguage.com/chinese-bible-midsize-black-black-pvc-covered-chinese-union-version-the-most-popular-bible-in-mainland-china-with-thumb-index-golden-letters-on-cover-red-edges-cuv-holy-bible/" target="_blank" rel="noreferrer">内页风格参考 ↗</a><a href="https://ebible.org/cmn-cu89s/copyright.htm" target="_blank" rel="noreferrer">经文来源：eBible 和合本（公版标注）↗</a></div></dialog>
+<dialog id="help-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">手势小抄</div><h2>像移动一本书，<br>而不是滚动一篇文章。</h2><dl><dt>单指慢拖</dt><dd>上下左右移动整本书；拖动再远也不因距离自动翻页。</dd><dt>单指快滑</dt><dd>从左页开始向右快滑，向前翻；从右页开始向左快滑，向后翻。反方向只移动。</dd><dt>双指同向快滑</dt><dd>先翻 5 页，1.25 秒内连续同向快滑，依次翻 10、20 页。停一下重新从 5 页开始。</dd><dt>双指张开 / 合拢</dt><dd>以手指中心缩放；一旦判为缩放，本次触摸不会翻页。</dd><dt>双击 / 鼠标滚轮</dt><dd>双击靠近该位置，再双击还原；滚轮移动，Ctrl + 滚轮缩放。</dd></dl><p class="notice">“翻 1 页”按翻动一张纸计算，即切换到下一组对开。方向按起手时触摸到的实体左页 / 右页判断，不按屏幕左右判断。</p></dialog>
+<dialog id="chapter-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">打开到</div><h2 id="chapter-title">创世记</h2><div id="chapter-list" class="chapter-list"></div><button class="edge-link" id="chapter-to-edge">换一卷？去看书侧的标签 →</button></dialog>
+</body></html>
