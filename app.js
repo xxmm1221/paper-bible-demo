@@ -1,5 +1,11 @@
 (() => {
   'use strict';
+  if(document.documentElement?.dataset?.requiresRules==='true'&&document.documentElement.dataset.ruleLayout!=='ready'){
+    document.documentElement.dataset.ruleLayout='unavailable';
+    const panel=document.getElementById('reader-rule-loading');
+    if(panel){panel.setAttribute('role','alert');panel.querySelector('p').textContent='新版阅读资料未能完整载入，请检查网络后重试。未改动你的阅读位置和书签。';}
+    return;
+  }
   const $=id=>document.getElementById(id), D=window.BIBLE_DATA, G=window.PaperGestures;
   const stage=$('stage'),book=$('book'), papers=[$('left-paper'),$('right-paper')];
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -15,7 +21,9 @@
   let sceneProgress=0,digitalProgress=0,focusAmount=0,focusRect=null,sceneState='reading';
   let navEpoch=0,navFrame=0,navCancel=null,readPose=null,demoEpoch=0,tapTimer=null;
   const pointers=new Map();
-  try{lastSaved=JSON.parse(localStorage.getItem('paper-bible-position-v1'));spread=clamp((lastSaved?.spread||0)&~1,0,D.pages.length-2);}catch{}
+  let positionStorage;try{positionStorage=window.PAPER_READER_STORAGE||window.localStorage;}catch{}
+  try{lastSaved=JSON.parse(positionStorage?.getItem('paper-bible-position-v1'));spread=clamp((lastSaved?.spread||0)&~1,0,D.pages.length-2);}catch{}
+  if(Number.isInteger(window.PAPER_INITIAL_SPREAD)){spread=clamp(window.PAPER_INITIAL_SPREAD&~1,0,D.pages.length-2);lastSaved=null;}
 
   const Page=window.PaperPage;
   function svgPage(p,index){
@@ -86,17 +94,18 @@
     }
     foldFrame=requestAnimationFrame(frame);
   }
-  function currentBook(){return D.books[Math.max(0,D.pages[spread+1].b)];}
+  function readingPage(){const right=D.pages[spread+1],left=D.pages[spread];return right.b>=0&&!right.blank&&right.start?right:left.b>=0&&!left.blank&&left.start?left:right;}
+  function currentBook(){const p=readingPage();return D.books[p.b>=0?p.b:p.frontmatter==='新约全书'?39:0];}
   function progress(){return (spread+1)/(D.pages.length-1);}
   function render(){
     papers[0].innerHTML=svgPage(D.pages[spread],spread);
     papers[1].innerHTML=svgPage(D.pages[spread+1],spread+1);
     leaves.setPages(spread,spread+1);
-    const b=currentBook(),ref=D.pages[spread+1].start||'1:1';
+    const b=currentBook(),ref=readingPage().start||'1:1';
     $('book-name').textContent=b.name;
-    const endRef=D.pages[spread+1].end||ref;
+    const endRef=readingPage().end||ref;
     $('chapter-name').textContent=`${ref.split(':')[0]===endRef.split(':')[0]?'第 '+ref.split(':')[0]:ref.split(':')[0]+'–'+endRef.split(':')[0]} 章`;
-    $('page-label').textContent=spread===0?'卷首 — 1':`${spread} — ${spread+1}`;
+    $('page-label').textContent=(D.pages[0]?.layoutVersion===2?'试排 · ':'')+(spread===0?'卷首 — 1':`${spread} — ${spread+1}`);
     $('progress-label').textContent=`${b.short} · 全书 ${Math.round(progress()*100)}%`;
     const p=progress();
     applyMaterial();
@@ -184,7 +193,7 @@
   }
   function save(){
     if(mode!=='open')return;
-    try{localStorage.setItem('paper-bible-position-v1',JSON.stringify({spread,zoom:scale/fitScale,centerX:(view.w/2-x)/scale,centerY:(view.h/2-y)/scale,focus}));}catch{}
+    try{positionStorage?.setItem('paper-bible-position-v1',JSON.stringify({spread,zoom:scale/fitScale,centerX:(view.w/2-x)/scale,centerY:(view.h/2-y)/scale,focus,bookName:currentBook().name,ref:readingPage().start||'',edition:D.edition}));}catch{}
   }
   function fit(){if(mode!=='open')return;abortFold();focus='fit';scale=fitScale;x=(view.w-960*scale)/2;y=(view.h-704*scale)/2-6;constrain();transform();save();}
   function focusPage(side){
@@ -232,10 +241,10 @@
     edgeY=clamp(edgeY+delta/lastSceneFrame.edgePixelsPerUnit,0,704);paintScene();
     edgeY=lastSceneFrame.edgeCenterY;
   }
-  let bookmarkStorage;try{bookmarkStorage=window.localStorage;}catch{}
+  let bookmarkStorage;try{bookmarkStorage=window.PAPER_READER_STORAGE||window.localStorage;}catch{}
   ribbons=window.PaperRibbons.create({host:$('ribbon-bookmarks'),panelHost:document.querySelector('.stage-wrap'),storage:bookmarkStorage,pageCount:D.pages.length,
-    getCurrent:()=>({spread,bookName:currentBook().name,ref:D.pages[spread+1].start||'',pose:capturePose()}),
-    onNavigate:(page,pose)=>selectBook(Math.max(0,D.pages[page+1]?.b??D.pages[page]?.b??0),page,pose)});
+    getCurrent:()=>({spread,...(D.layoutVersion===2?{page:readingPage()===D.pages[spread+1]?spread+1:spread}:{}),bookName:currentBook().name,ref:readingPage().start||'',pose:capturePose()}),
+    onNavigate:(page,pose)=>selectBook(Math.max(0,(D.layoutVersion===2?D.pages[page]?.b:D.pages[page+1]?.b)??D.pages[page]?.b??0),page,pose)});
   window.addEventListener('paper-ribbons-request',()=>{if(mode==='open'){cancelDemo();ribbons.open(0);}});
   ['left-edge-open','right-edge-open'].forEach(id=>{
     $(id).addEventListener('click',e=>{if(e.detail===0){e.preventDefault();requestFan(id.startsWith('left')?'left':'right');}});

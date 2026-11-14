@@ -1,5 +1,32 @@
 # 纸页 · 纸质圣经阅读体验 Demo
 
+## 规则排版试用版（rules-1）
+
+`index.html` 与 `rules.html` 都使用统一规则试排。旧 `bible-data.js` 仅用于把可识别的旧阅读位置映射到经文锚点，实际阅读内容来自 `data/bible-source.js` 与 `paper-layout.js`。
+
+- 从本机既有和合本 SQLite 明文库导出 66 卷、1189 章、31102 条正文和 2652 个标题；正文、括注、标点与 4115 个全角空格原样保留。数据源的章节划分不强行改成另一译本。
+- `paper-layout.js` 从语义文本运行统一规则：双栏 16 字格、自然字形、两行章号避让、节号留位、标点禁则、标题与正文防孤行。前端不存逐页逐行断点，也不使用扫描页作正文图片。
+- 本轮暂不补缺失的诗行/专名标记与页底引注，未把未经确认的 App 分段直接当作印刷段落。自动生成 **1124 个试排纸面，不等于原版页码**。歌罗西书开头五行匹配只是小样校验，不代表全书精确复刻。
+- 静态 SVG 与翻页 Canvas 共享排版坐标；原有纸层、侧边切口、翻页及丝带交互仍使用自动分页后的实际纸量。
+- `paper-edition.js` 按经文锚点迁移可识别的旧位置/丝带，另存于 `rules-1` 命名空间，不覆盖旧体验版存档。已删除的实验版丝带不会从旧存档反复恢复。
+- `local-data/` 已被 Git 忽略。发布脚本仅导出阅读必需的语义字段与字体；不上传原数据库、PDF、旧 App 资料目录、未使用的分段信息或本地校验报告。
+
+本地生成（`--source` 必须指向已有、可合法使用的明文库）：
+
+```powershell
+python -X utf8 tools/export-rule-source.py --source "<本机和合本数据库路径>"
+python -X utf8 tools/fetch-rule-font.py
+node tools/prepare-rule-release.cjs
+node test-paper-layout.cjs
+node test-paper-edition.cjs
+node test-rule-integration.cjs
+python -m http.server 8776 --bind 127.0.0.1
+```
+
+本地入口 `http://127.0.0.1:8776/rules.html`；可用 `?ref=COL.1:1` 打开样页。额外字库使用相同 Noto Serif SC Regular，实际 cmap 核验覆盖新增的 63 个可见字符；来源与哈希记录在本地校验报告。
+
+下文的 1254 页、旧字体参数和 flex-5 等为历史版本说明；当前规则版为 1124 个试排纸面。
+
 一个围绕经文「空间位置记忆」设计的浏览器阅读原型。手机上可缩放、平移整本书；平板横屏可以看到完整的左右对开。
 
 ## 试用

@@ -163,4 +163,55 @@ test('rendering all fixed pages leaves pagination, chapters and source text unch
   }
   assert.equal(crypto.createHash('sha256').update(JSON.stringify(D)).digest('hex'),initialDataHash);
 });
+
+const ruleFixture={b:51,title:'歌罗西书',start:'1:1',end:'1:2',layoutVersion:2,displayPage:224,columnX:[38,253],cols:[[
+  {kind:'heading',y:144,runs:[{kind:'heading',text:'问',x:0,width:12,size:12,y:144},{kind:'heading',text:'候',x:12,width:12,size:12,y:144}]},
+  {kind:'body',y:162,runs:[{kind:'chapter',text:'1',x:0,width:36,size:30,y:179.454545},
+    {kind:'body',text:'提',x:36,width:12,size:12,y:162},{kind:'body',text:'摩',x:48,width:12,size:12,y:162},{kind:'body',text:'太',x:60,width:12,size:12,y:162},
+    {kind:'body',text:'，',x:72,width:12,size:12,y:162},{kind:'verse',text:'2',x:84,width:6,size:7.5,y:159},{kind:'body',text:'写',x:90,width:12,size:12,y:162}]},
+  {kind:'body',y:179.454545,runs:[{kind:'body',text:'。',x:36,width:12,size:12,y:179.454545},{kind:'verse',text:'15',x:48,width:12,size:7.5,y:176.454545},
+    {kind:'body',text:'爱',x:60,width:12,size:12,y:179.454545},{kind:'body',text:'　',x:72,width:12,size:12,y:179.454545},{kind:'body',text:'神',x:84,width:12,size:12,y:179.454545}]}
+],[]]};
+ruleFixture.b=D.books.findIndex(b=>b.code==='COL');
+
+test('rule-generated text shares the exact same coordinates in SVG and canvas without fitting',()=>{
+  const p=ruleFixture,cmds=Page.commands(p,1111,D.books),svg=Page.svg(p,1111,D.books),texts=svgTexts(svg);
+  assert.equal(cmds.length,texts.length);
+  assert.doesNotMatch(svg,/textLength|lengthAdjust|spacingAndGlyphs|scaleX|font-stretch/);
+  assert.match(svg,/规则试排第 224 页，非原版页码/);
+  cmds.forEach((c,i)=>{assert.equal(texts[i].text,c.text);near(+texts[i].attrs.x,c.x,'rule SVG x');near(+texts[i].attrs.y,c.y,'rule SVG y');near(+texts[i].attrs['font-size'],c.size,'rule SVG size');});
+  for(const ratio of [1,2,3]){
+    const f=mockCanvas();Page.paint(f.canvas,p,1111,D.books,ratio);
+    const paintBody=f.calls.filter(c=>c.size===12&&c.font.includes('PaperSerif'));
+    const source=cmds.filter(c=>c.role==='body');
+    assert.equal(paintBody.length,source.length);
+    source.forEach((c,i)=>{assert.equal(paintBody[i].text,c.text);near(paintBody[i].x,c.x,'rule canvas x');near(paintBody[i].y,c.y,'rule canvas y');near(paintBody[i].size,c.size,'rule canvas size');});
+    assert.deepEqual(f.scales,[[ratio,ratio]]);
+  }
+});
+
+test('rule headers, chapter overlays and verse numbers respect their engine-owned slots',()=>{
+  const cmds=Page.commands(ruleFixture,1111,D.books),chapter=cmds.find(c=>c.role==='chapter');
+  const title=cmds.find(c=>c.role==='title'),number=cmds.find(c=>c.role==='page-number');
+  assert.equal(number.text,'224');assert.equal(title.y,96);assert.equal(title.size,24);
+  assert.equal(chapter.y,179.454545);assert.equal(chapter.size,30);
+  const tai=cmds.find(c=>c.role==='body'&&c.text==='太'),v2=cmds.find(c=>c.role==='verse'&&c.text==='2');
+  assert.ok(v2.x>=tai.x+tai.size+12,'verse 2 clears Timothy and its punctuation cell');
+  const period=cmds.find(c=>c.role==='body'&&c.text==='。'),v15=cmds.find(c=>c.role==='verse'&&c.text==='15');
+  assert.equal(period.size,tai.size);assert.equal(period.family,tai.family);
+  assert.ok(v15.x>=period.x+period.size,'verse 15 never occupies period glyph cell');
+  for(const c of cmds.filter(c=>c.role==='body'&&c.row<=2))assert.ok(c.x>=chapter.x+chapter.slotWidth,'drop-cap rows leave the allocated chapter slot');
+});
+
+test('New Testament divider and physical blank pages are rendered distinctly',()=>{
+  const p={layoutVersion:2,b:-1,frontmatter:'新约全书',title:'新约全书',start:'',end:'',displayPage:'',cols:[[],[]]};
+  const commands=Page.commands(p,1000,D.books);
+  assert.equal(commands.find(c=>c.role==='title').text,'新约全书');
+  assert.equal(commands.find(c=>c.role==='subtitle').text,'THE NEW TESTAMENT');
+  assert.match(commands.find(c=>c.role==='edition-note').text,/暂不含页底引注/);
+  const blank={...ruleFixture,blank:true};assert.deepEqual(Page.commands(blank,1002,D.books),[]);
+  assert.match(Page.svg(blank,1002,D.books),/aria-label="空白纸页"/);
+  assert.equal(svgTexts(Page.svg(blank,1002,D.books)).length,0);
+  const f=mockCanvas();Page.paint(f.canvas,blank,1002,D.books);assert.equal(f.calls.length,0);
+});
 console.log(JSON.stringify({pageRendererScenarios:checks,referencePages:indices,fixedPages:D.pages.length,sourceUnchanged:true}));

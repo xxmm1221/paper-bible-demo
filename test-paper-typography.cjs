@@ -71,4 +71,46 @@ for(const [code,index] of [['JON',907],['OBA',905]]){
 const umd={window:{}};vm.runInNewContext(fs.readFileSync('./paper-typography.js','utf8'),umd);
 check(typeof umd.window.PaperTypography.layoutBody==='function','browser UMD export works');
 check(T.layoutBody({cols:[[],[]]}).length===0,'empty title page supported');
+// A rule-generated page owns all runtime coordinates. The renderer consumes
+// them exactly instead of fitting strings or deriving a second set of rows.
+const ruleLine={kind:'body',y:162,runs:[
+  {kind:'chapter',text:'1',x:0,width:36,size:30,y:179.454545},
+  {kind:'body',text:'太',x:36,width:12.25,size:12,y:162},
+  {kind:'body',text:'。',x:48.25,width:12,size:12,y:162},
+  {kind:'verse',text:'2',x:60.25,width:6,size:7.5,y:159},
+  {kind:'body',text:'写',x:66.25,width:12,size:12,y:162},
+  {kind:'body',text:'　',x:78.25,width:12,size:12,y:162}
+]};
+const rulePage={layoutVersion:2,columnX:[38,253],cols:[[
+  {kind:'heading',y:144,runs:[{kind:'heading',text:'问',x:0,width:12,size:12,y:144},{kind:'heading',text:'候',x:12,width:12,size:12,y:144}]},ruleLine,
+  {kind:'body',y:179.454545,runs:[{kind:'body',text:'信',x:36,width:12,size:12,y:179.454545}]}
+],[]]};
+const ruleCommands=T.layoutBody(rulePage),ruleBody=ruleCommands.filter(c=>c.role==='body');
+check(ruleBody.map(c=>c.text).join('')==='太。写　信','rule engine source text and full-width space survive');
+check(ruleBody.every(c=>c.size===12),'rule glyphs retain one natural body size');
+for(const command of ruleCommands){
+  const input=rulePage.cols[command.column][command.row].runs[command.run];
+  near(command.x,rulePage.columnX[command.column]+input.x,'rule run x used without renderer justification');
+  near(command.y,input.y,'explicit engine baseline preserved');near(command.size,input.size,'explicit engine size preserved');
+  near(command.slotWidth,input.width,'slot width records layout, not glyph fitting');
+  check(!('textLength' in command)&&!('scaleX' in command),'rule output forbids anisotropic fitting');
+}
+const ruleChapter=ruleCommands.find(c=>c.role==='chapter'),ruleVerse=ruleCommands.find(c=>c.role==='verse');
+check(ruleChapter.y>ruleLine.y,'drop capital spans downwards, not into the previous line');
+check(ruleChapter.y-ruleChapter.size>144,'drop-cap em box clears preceding heading baseline');
+check(ruleVerse.anchor==='start','verse uses explicit engine left edge');
+check(ruleCommands.filter(c=>c.role==='heading').every(c=>c.weight==='600'),'section headings receive distinct blackface weight');
+check(T.layoutBody({...rulePage,blank:true}).length===0,'physical blank page contains no hidden text');
+check(JSON.stringify(umd.window.PaperTypography.layoutBody(rulePage))===JSON.stringify(ruleCommands),'rule rendering is equal in browser and Node');
+const compactRulePage={layoutVersion:2,columnX:[40,255],cols:[[{kind:'body',y:170,runs:[
+  {kind:'body',text:'提摩太。',x:36,width:50,size:12,y:170,advances:[12.5,12.5,13,12]},
+  {kind:'verse',text:'2',x:86,width:6,size:7.5,y:167}
+]}],[]]};
+const compactCommands=T.layoutBody(compactRulePage);
+check(compactCommands.map(c=>c.text).join('')==='提摩太。2','compacted runs preserve all glyphs');
+for(let i=0;i<4;i++){
+  near(compactCommands[i].x,76+[0,12.5,25,38][i],'precomputed justification advance used unchanged');
+  near(compactCommands[i].size,12,'compaction does not alter glyph size');
+}
+near(compactCommands[4].x,126,'verse uses engine slot after compacted body run');
 console.log(JSON.stringify({typographyChecks:checks,pages:D.pages.length,bodyGlyphs,chapters,verses,bodySize:C.BODY_SIZE,lineHeight:C.LINE_HEIGHT,chapterSize:C.CHAPTER_SIZE,lastBaseline:684,repaginated:false}));

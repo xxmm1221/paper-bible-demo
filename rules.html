@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN" class="paper-immersive" data-reader-scene="reading" data-reader-chrome="hidden" data-paper-scene="reading" data-reader-build="rules-1" data-requires-rules="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#d8d0c2">
+  <meta name="description" content="固定纸页、双栏对开、书侧索引与真实阅读进度。一个保留经文空间记忆的圣经阅读体验原型。">
+  <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="app-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>纸页 · 统一规则排版校准</title>
+  <link rel="stylesheet" href="fonts.css?v=rules-1">
+  <link rel="stylesheet" href="fonts-extra.css?v=rules-1">
+  <link rel="stylesheet" href="style.css?v=rules-1">
+  <link rel="stylesheet" href="book-index.css?v=rules-1"><link rel="stylesheet" href="book-scene.css?v=rules-1"><link rel="stylesheet" href="book-solid.css?v=rules-1"><link rel="stylesheet" href="book-leaves.css?v=rules-1"><link rel="stylesheet" href="immersion.css?v=rules-1">
+  <script src="book-material.js?v=rules-1" defer></script><script src="book-kinematics.js?v=rules-1" defer></script><script src="book-solid.js?v=rules-1" defer></script><script src="book-leaves.js?v=rules-1" defer></script><script src="book-scene.js?v=rules-1" defer></script><script src="book-index.js?v=rules-1" defer></script>
+  <script src="bible-data.js?v=rules-1" defer></script>
+  <script src="data/bible-source.js?v=rules-1" defer></script>
+  <script src="paper-layout.js?v=rules-1" defer></script>
+  <script src="paper-edition.js?v=rules-1" defer></script>
+  <script src="rule-reader-bootstrap.js?v=rules-1" defer></script>
+  <script src="paper-typography.js?v=rules-1" defer></script><script src="paper-page.js?v=rules-1" defer></script>
+  <script src="gesture-core.js?v=rules-1" defer></script>
+  <script src="paper-physics.js?v=rules-1" defer></script>
+  <script src="paper-renderer.js?v=rules-1" defer></script>
+  <script src="paper-edges.js?v=rules-1" defer></script><script src="ribbon-bookmarks.js?v=rules-1" defer></script>
+  <link rel="stylesheet" href="paper-edges.css?v=rules-1"><link rel="stylesheet" href="ribbon-bookmarks.css?v=rules-1">
+  <script src="app.js?v=rules-1" defer></script><script src="immersion.js?v=rules-1" defer></script>
+
+  <script src="reader-release.js?v=rules-1" defer></script>
+  <style>#reader-rule-loading{position:fixed;inset:0;z-index:9999;display:grid;place-content:center;padding:32px;background:#e8e1d4;color:#493f32;text-align:center;font:16px/1.8 system-ui,sans-serif}#reader-rule-loading p{max-width:30em}#reader-rule-loading a{color:#8b3939}html[data-rule-layout="ready"] #reader-rule-loading{display:none}</style>
+</head>
+<body data-paper-scene="reading">
+<div id="reader-rule-loading" role="status"><strong>纸页 · 正在准备书页</strong><p>首次打开需要载入全文和字体，请稍候。</p><a href="./?v=rules-1">加载遇到问题？重新打开</a></div>
+<header class="masthead">
+  <a class="brand" href="#" aria-label="纸页，返回阅读"><span class="brand-mark">页</span><span>纸页<small>PAPER BIBLE</small></span></a>
+  <div class="edition-label">和合本 · 规则排版校准 <span>RULES 01 · 统一规则试排</span></div>
+  <button class="text-button" id="about-open">关于这本书 <span aria-hidden="true">↗</span></button>
+</header>
+<main>
+  <aside class="intro">
+    <div class="eyebrow"><i></i> 为位置记忆而设计</div>
+    <h1>记得那句话，<br>也记得<br><em>它在哪里。</em></h1>
+    <p class="lede">不是一条滚动的文字流。<br>是一本可以握住、翻动、重新找到的书。</p>
+    <div class="principles">
+      <div><span class="guide-icon">↔</span><p><strong>慢慢挪动，细细读</strong><small>轻拖移动纸页 · 捏合缩放整本书</small></p></div>
+      <div><span class="guide-icon">⌁</span><p><strong>捏住一页，掀开，也可以放回</strong><small>长按后慢拖 · 纸页弯起，下一页露出</small></p></div>
+      <div><span class="guide-icon">Ⅱ</span><p><strong>两根手指，翻过一叠纸</strong><small>连续快滑：5 页 → 10 页 → 20 页</small></p></div>
+    </div>
+    <div class="lab-controls"><span>用鼠标先试试</span><div><button id="demo-pan">慢拖示范</button><button id="demo-burst">双指快翻示范</button></div></div>
+    <p class="prototype-note">统一规则试排 · 暂不含页底引注<br>同一页的位置不动，纸张可以慢慢弯起</p>
+  </aside>
+  <section class="reader" aria-label="纸质圣经阅读器">
+    <div class="reader-header">
+      <button class="location" id="location-button" aria-label="选择章节"><span id="book-name">创世记</span><span class="location-ref" id="chapter-name">第 1 章</span><span aria-hidden="true">⌄</span></button>
+      <div class="view-switch" role="group" aria-label="观看方式"><button id="view-open" class="selected" aria-pressed="true">展开</button><button id="view-edge" aria-pressed="false">看书侧</button></div>
+      <button class="icon-button" id="help-open" aria-label="手势说明">?</button>
+    </div>
+    <div class="stage-wrap">
+      <div class="stage" id="stage" tabindex="0" role="region" aria-label="对开书页。直接拖动平移；长按约半秒后慢拖可掀页、回拖放回；双指捏合缩放。左页向右前翻，右页向左后翻。">
+        <div class="surface-caption" id="surface-caption">一张固定的版面，一段熟悉的位置</div>
+        <div class="book" id="book">
+          <div class="book-volume" id="book-volume">
+            <div id="paper-solid" aria-hidden="true"></div><div id="book-leaves" aria-hidden="true"></div>
+            <div class="right-half" id="right-half"><div class="cover cover-right"></div><div class="page-stack right-stack" id="right-stack"></div><div id="right-paper-edges" class="natural-paper-edge" aria-hidden="true"></div><article class="paper right-paper" id="right-paper" aria-label="右页"></article><button class="paper-edge-hit edge-hit-right" id="right-edge-open" aria-label="点按右侧页边，拨开右侧纸页和切口目录" title="点按页边，拨开纸层切口"></button></div>
+            <div class="left-half" id="left-half"><div class="cover cover-left"></div><div class="page-stack left-stack" id="left-stack"></div><div class="left-reading-edge" id="left-reading-edge" aria-hidden="true"></div><div id="left-paper-edges" class="natural-paper-edge" aria-hidden="true"></div><article class="paper left-paper" id="left-paper" aria-label="左页"></article><button class="paper-edge-hit edge-hit-left" id="left-edge-open" aria-label="点按左侧页边，拨开左侧纸页和切口目录" title="点按页边，拨开纸层切口"></button></div>
+            <div class="gutter"></div><div id="ribbon-bookmarks" class="ribbon-bookmarks"></div>
+            <div class="index-placement" id="index-placement"><div class="physical-index-host" id="physical-index-host"></div></div>
+          </div>
+        </div>
+        <div class="touch-ring" id="touch-ring" aria-hidden="true"></div>
+      </div>
+
+      <div class="gesture-feedback" id="gesture-feedback" role="status" aria-live="polite">点按页边看目录 · 红丝带可夹页</div>
+      <div class="viewport-map" id="viewport-map" aria-hidden="true"><div class="map-fold"></div><div id="map-window"></div></div>
+    </div>
+    <div class="reading-tools" id="reading-tools">
+      <div class="focus-group" role="group" aria-label="阅读视角"><button id="fit-book" class="active">对开</button><button id="focus-left">左页</button><button id="focus-right">右页</button><button id="demo-peek" class="peek-demo" title="演示长按、掀开偷看、再放回">掀页演示</button></div>
+      <div class="zoom-tools"><button id="zoom-out" aria-label="缩小">−</button><button id="zoom-value" title="恢复对开视角">100%</button><button id="zoom-in" aria-label="放大">＋</button></div>
+    </div>
+    <footer class="reader-footer">
+      <button class="nav-button" id="prev" aria-label="向前翻一页">←</button>
+      <div class="book-progress"><div class="progress-label"><span id="page-label">1 — 2</span><span id="progress-label">创世记</span></div><div class="thickness-track" title="左边是已翻过的书页，右边是尚未翻过的书页"><div class="read-block" id="read-block"></div><i id="position-pin"></i><div class="unread-block"></div></div><div class="thickness-labels"><span>已经翻过的纸页</span><span>还在右手边的纸页</span></div></div>
+      <button class="nav-button" id="next" aria-label="向后翻一页">→</button>
+    </footer>
+  </section>
+</main>
+      <div class="scene-controls" id="scene-controls" aria-label="书侧目录">
+        <div class="scene-topbar"><button id="scene-back">← 回到阅读</button><span id="scene-status" role="status">沿着书侧，找回那一卷</span></div>
+        <div class="scene-bottom"><div class="scene-chapter-list" id="scene-chapter-list" hidden></div><div class="scene-actions"><button id="scene-digital" aria-pressed="false">展开为数字目录</button><button id="scene-chapters">当前卷章节</button></div><p>黑金 · 旧约　朱红 · 新约<br>上下拖动查看切口 · 点选纸层，连续翻开。</p></div>
+      </div>
+<dialog id="about-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">关于这次实验</div><h2>位置不动，<br>只是换一种拿书的方式。</h2><p>手机上，放大并移动观看；平板横屏，完整展开两页。经文不会随屏幕宽度重新排版。</p><p>左右书页堆叠与底部厚度条对应全书位置。点按一侧页边，只拨开这一侧：上层向书脊错开更多，底层移动更少，露出嵌在半圆纸层切口里的标签。点切口可直接连续翻到那一卷，不必合书。上下拖动可查看其余切口；需要全部书卷时，可切换数字目录。合书和展开采用分层弯曲纸面，不再整块转动。两根红色丝带可独立夹页，点丝带尾端设置或回到书签。</p><p class="notice">规则排版试用版：现成和合本正文、标题与括注，按统一的字格、行距、双栏和章号规则自动分页。没有逐行位置表，也没有使用扫描页作阅读图像。暂不补齐缺失的语义标记和页底引注，因此试排页码、断行与原版仍有差异；不能宣称已经精确复刻。</p><p id="reader-version">体验版本 · rules-1<br><a id="reader-reload" href="./?v=rules-1">重新载入最新版</a>（保留阅读位置）</p><p>本轮正文导入既有和合本语义文本，保留标点、全角空格和现有括注。暂不补齐缺失的语义标记与页底引注，显示的是试排页码。阅读位置及两根丝带与旧体验版分开保存。</p><div class="sources"><a href="https://www.bibleinmylanguage.com/chinese-bible-midsize-black-black-pvc-covered-chinese-union-version-the-most-popular-bible-in-mainland-china-with-thumb-index-golden-letters-on-cover-red-edges-cuv-holy-bible/" target="_blank" rel="noreferrer">内页风格参考 ↗</a><a href="https://ebible.org/cmn-cu89s/copyright.htm" target="_blank" rel="noreferrer">旧体验版资料来源：eBible ↗</a></div></dialog>
+<dialog id="help-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">手势小抄 · 可逆的翻页</div><h2>先捏住这张纸，<br>再决定要不要翻过去。</h2><dl><dt>长按约半秒，再慢慢拖</dt><dd>右页向左掀，左页向右掀。从触点到书脊之间会弯起，下面的下一页逐渐露出；手指往回走，纸页就跟着退回。</dd><dt>松手放下</dt><dd>翻过中间或向前甩出时完成翻页；没过中间或明显往回拖时回落。只掀开偷看，不会改变页码。中途添加第二根手指会放回纸页，转为缩放。</dd><dt>直接单指慢拖</dt><dd>不先长按，仍然是移动整本书，不会进入掀页。</dd><dt>单指 / 双指快滑</dt><dd>单指翻 1 页；双指先翻 5 页，1.25 秒内连续同向快滑加速到 10、20 页。都用弯曲纸页过渡。</dd><dt>双指张开 / 合拢</dt><dd>缩放整本书；本次触摸不会误触发翻页。</dd><dt>点按页边</dt><dd>点左右纸页的外侧边缘，只把该侧纸层向书脊拨开；上层错开更多，露出半圆切口。点切口直接翻到该卷。上下拖动查看其他切口，点空白或「收回纸页」放回；阅读时慢拖页边仍是平移。</dd><dt>两根红丝带</dt><dd>点书底的丝带尾端，可分别夹住当前页、回到已夹位置、改夹或取出。书签保存在本浏览器；放大后看不到丝带时，可在阅读工具中打开「丝带书签」。</dd><dt>鼠标与演示</dt><dd>按住鼠标约半秒再拖，也能掀页；点击工具栏「掀页演示」可看一次掀开、偷看、放回的完整过程。Esc 可放回纸页。</dd></dl><p class="notice">“翻 1 页”按翻动一张纸计算，即下一组对开。当前为轻量曲面纸张模拟，并非完整纸张力学仿真；不同手机的多指手感仍需真机体验。</p></dialog>
+
+</body></html>
