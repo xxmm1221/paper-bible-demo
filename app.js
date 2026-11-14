@@ -15,40 +15,9 @@
   const pointers=new Map();
   try{lastSaved=JSON.parse(localStorage.getItem('paper-bible-position-v1'));spread=clamp((lastSaved?.spread||0)&~1,0,D.pages.length-2);}catch{}
 
-  function svgPage(p,index){
-    const name=p.b<0?'旧约全书':D.books[p.b].name;
-    let s=`<svg viewBox="0 0 480 704" role="img" aria-label="${esc(name)}，体验版第 ${index} 页，${esc(p.start)} 至 ${esc(p.end)}"><text x="240" y="29" text-anchor="middle" font-size="10">${index||''}</text><text x="${index%2?447:32}" y="29" text-anchor="${index%2?'end':'start'}" font-size="9" fill="#a46453" style="fill:#a46453">${esc(name)} ${esc(p.start)}</text>`;
-    if(p.b===-1){
-      return s+'<text x="240" y="280" text-anchor="middle" font-size="29" letter-spacing="10">旧约全书</text><text x="240" y="312" text-anchor="middle" font-size="10" letter-spacing="2" font-family="Georgia,serif">THE OLD TESTAMENT</text><path d="M180 338 H300" stroke="#b2a78c" stroke-width=".6"/><text x="240" y="378" text-anchor="middle" font-size="11">和合本 · 神版</text><text x="240" y="644" text-anchor="middle" font-size="8" fill="#8f846c">固定版面阅读体验 · 原型排版</text></svg>';
-    }
-    if(p.title)s+=`<text x="240" y="64" text-anchor="middle" font-size="22" letter-spacing="8">${esc(name)}</text>`;
-    for(let c=0;c<2;c++)for(let row=0;row<p.cols[c].length;row++){
-      for(const [type,text,offset] of p.cols[c][row]){
-        const tx=32+c*218+offset*14,ty=96+row*17.35;
-        const size=type==='c'?27:type==='v'?10:14;
-        s+=`<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="${size}"${type==='v'?' font-family="Georgia,serif" font-weight="bold"':''}${type==='t'&&text.length>1?` textLength="${text.length*14}" lengthAdjust="spacingAndGlyphs"`:''}>${esc(text)}</text>`;
-      }
-    }
-    if(!p.cols.some(c=>c.length))s+='<text x="240" y="350" text-anchor="middle" font-size="10" fill="#a5977b">·</text>';
-    return s+'</svg>';
-  }
-  function paintPage(canvas,index,ratio){
-    const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);
-    const gradient=ctx.createLinearGradient(0,0,480,0),right=index%2===1;
-    (right?[[0,'#dcd5bf'],[.09,'#fffdf1'],[.9,'#fffef5'],[1,'#f9f6eb']]:[[0,'#f9f6eb'],[.1,'#fffef5'],[.91,'#fffdf1'],[1,'#dcd5bf']]).forEach(([stop,color])=>gradient.addColorStop(stop,color));
-    ctx.fillStyle=gradient;ctx.fillRect(0,0,480,704);
-    const svg=new DOMParser().parseFromString(svgPage(D.pages[index],index),'image/svg+xml');
-    for(const el of svg.querySelectorAll('text')){
-      const text=el.textContent,px=Number(el.getAttribute('x')),py=Number(el.getAttribute('y')),size=Number(el.getAttribute('font-size')||14);
-      const family=el.getAttribute('font-family')||'PaperSerif,"Noto Serif CJK SC","Songti SC",SimSun,serif';
-      const spacing=Number(el.getAttribute('letter-spacing')||0),anchor=el.getAttribute('text-anchor')||'start';
-      ctx.save();ctx.font=`${el.getAttribute('font-weight')||'normal'} ${size}px ${family}`;ctx.fillStyle=el.getAttribute('fill')||'#2d2920';ctx.textBaseline='alphabetic';
-      if(spacing){const chars=[...text],width=chars.reduce((sum,c)=>sum+ctx.measureText(c).width,0)+spacing*(chars.length-1);let at=px-(anchor==='middle'?width/2:anchor==='end'?width:0);for(const char of chars){ctx.fillText(char,at,py);at+=ctx.measureText(char).width+spacing;}}
-      else{ctx.textAlign=anchor==='middle'?'center':anchor==='end'?'right':'left';const length=Number(el.getAttribute('textLength'));if(length){ctx.translate(px,py);ctx.scale(length/Math.max(1,ctx.measureText(text).width),1);ctx.fillText(text,0,0);}else ctx.fillText(text,px,py);}
-      ctx.restore();
-    }
-    if(index===0){ctx.strokeStyle='#b2a78c';ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(180,338);ctx.lineTo(300,338);ctx.stroke();}
-  }
+  const Page=window.PaperPage;
+  function svgPage(p,index){return Page.svg(p,index,D.books);}
+  function paintPage(canvas,index,ratio){Page.paint(canvas,D.pages[index],index,D.books,ratio);}
   const sheetRenderer=new window.PaperSheetRenderer(book,paintPage);
   sheetRenderer.onContextLoss=()=>{abortFold();feedback('绘图暂时中断，请刷新页面后重试');};
   function clearHold(){clearTimeout(holdTimer);holdTimer=null;}

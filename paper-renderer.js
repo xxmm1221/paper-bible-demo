@@ -33,7 +33,17 @@
       if(gl){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indexBuffer);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,this.triangles,gl.STATIC_DRAW);}
       this.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(this.onContextLoss)this.onContextLoss();});
       this.hide();
-      document.fonts?.ready.then(()=>this.cache.clear());
+      // A newly opened book may load another local font subset. Never keep
+      // fallback-font page textures after that subset becomes available.
+      const refreshFonts=()=>{
+        this.cache.clear();
+        if(this.canvas.hidden||!this.pageIndices)return;
+        const shape=this.lastOptions;
+        this.prepare(...this.pageIndices,this.direction,this.count);
+        if(shape)this.draw(shape);
+      };
+      document.fonts?.ready.then(refreshFonts);
+      document.fonts?.addEventListener?.('loadingdone',refreshFonts);
     }
     initGL(gl){
       const program=gl.createProgram();gl.attachShader(program,shader(gl,gl.VERTEX_SHADER,VS));gl.attachShader(program,shader(gl,gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);
@@ -53,7 +63,7 @@
       return c;
     }
     prepare(front,back,direction,count=1){
-      this.direction=direction;this.count=count;this.images=[this.page(front),this.page(back)];
+      this.pageIndices=[front,back];this.direction=direction;this.count=count;this.images=[this.page(front),this.page(back)];
       const gl=this.gl;
       if(gl){gl.useProgram(this.program);this.images.forEach((image,i)=>{
         gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.textures[i]);
@@ -64,6 +74,7 @@
       this.canvas.hidden=false;this.shadow.hidden=false;
     }
     draw(options){
+      this.lastOptions={...options};
       const shape=P.mesh({...options,direction:this.direction},this.cols,this.rows);this.lastShape=shape;
       this.drawShadow(shape,options.progress);
       if(this.gl){
