@@ -1,14 +1,14 @@
 /* Runs the actual input controller with deterministic time and a renderer spy.
  * Does not substitute for touch-device/browser rendering tests. */
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
-const Physics=require('./paper-physics.js'),Gestures=require('./gesture-core.js');
+const Physics=require('./paper-physics.js'),Gestures=require('./gesture-core.js'),Material=require('./book-material.js');
 let checks=0;
 function fixture(startSpread=2,options={}){
   let now=0,nextId=1;const timers=new Map(),elements=new Map(),events={},saved=[],sceneWrites=[],indexCalls=[];let observer,indexOptions;
   const style=()=>({setProperty(name,value){this[name]=String(value);},getPropertyValue(name){return this[name]||'';},removeProperty(name){delete this[name];}});
   function listen(target,name,fn){const before=target[name];target[name]=before?(...args)=>{before(...args);return fn(...args);}:fn;}
   class Element{
-    constructor(id){this.id=id;this.style=style();this.dataset=new Proxy({},{set:(data,key,value)=>{data[key]=String(value);if(id==='stage'&&['scene','sceneProgress','digitalProgress','spread'].includes(key))sceneWrites.push({at:now,key,value:String(value),scene:data.scene,progress:Number(data.sceneProgress),digital:Number(data.digitalProgress),spread:data.spread});return true;}});this.innerHTML='';this.textContent='';this.handlers={};this.children=[];this.attributes={};this.clientWidth=id==='stage'?(options.width||980):65;this.clientHeight=id==='stage'?(options.height||600):46;this.hidden=false;this.disabled=false;this.inert=false;this.classes=new Set();this.classList={add:(...xs)=>xs.forEach(x=>this.classes.add(x)),remove:(...xs)=>xs.forEach(x=>this.classes.delete(x)),contains:x=>this.classes.has(x),toggle:(x,b)=>{if(b===undefined)b=!this.classes.has(x);b?this.classes.add(x):this.classes.delete(x);return b;}};}
+    constructor(id){this.id=id;this.style=style();this.dataset=new Proxy({},{set:(data,key,value)=>{data[key]=String(value);if(id==='stage'&&['scene','sceneProgress','digitalProgress','spread','leftSheets','rightSheets','leftDepth','rightDepth','materialSpread'].includes(key))sceneWrites.push({at:now,key,value:String(value),scene:data.scene,progress:Number(data.sceneProgress),digital:Number(data.digitalProgress),spread:data.spread});return true;}});this.innerHTML='';this.textContent='';this.handlers={};this.children=[];this.attributes={};this.clientWidth=id==='stage'?(options.width||980):65;this.clientHeight=id==='stage'?(options.height||600):46;this.hidden=false;this.disabled=false;this.inert=false;this.classes=new Set();this.classList={add:(...xs)=>xs.forEach(x=>this.classes.add(x)),remove:(...xs)=>xs.forEach(x=>this.classes.delete(x)),contains:x=>this.classes.has(x),toggle:(x,b)=>{if(b===undefined)b=!this.classes.has(x);b?this.classes.add(x):this.classes.delete(x);return b;}};}
     addEventListener(name,fn){listen(this.handlers,name,fn);}
     removeEventListener(name,fn){if(this.handlers[name]===fn)delete this.handlers[name];}
     dispatchEvent(event){event.target||=this;event.currentTarget=this;return this.handlers[event.type]?.(event);}
@@ -27,7 +27,7 @@ function fixture(startSpread=2,options={}){
   const el=id=>{if(!elements.has(id))elements.set(id,new Element(id));return elements.get(id);};
   const doc={getElementById:el,querySelector:s=>el(s),querySelectorAll:()=>[],createElement:tag=>new Element(tag),addEventListener:(name,fn)=>listen(events,'document:'+name,fn),dispatchEvent:e=>events['document:'+e.type]?.(e),hidden:false};
   doc.body=el('body');doc.documentElement=el('html');
-  const index={setProgress:p=>indexCalls.push({type:'progress',value:p,at:now}),setDigital:d=>indexCalls.push({type:'digital',value:d,at:now}),focusBook:i=>{indexCalls.push({type:'focus',value:i,at:now});return {x:200,y:300,width:47,height:17,index:i,...options.focusRects?.[i]};},clearFocus:()=>indexCalls.push({type:'clear',at:now}),resize:()=>indexCalls.push({type:'resize',at:now}),destroy(){}};
+  const index={setReadingMaterial:(material,assembly)=>indexCalls.push({type:'material',value:material,assembly,at:now,scene:el('stage').dataset.scene,progress:Number(el('stage').dataset.sceneProgress)}),setProgress:p=>indexCalls.push({type:'progress',value:p,at:now}),setDigital:d=>indexCalls.push({type:'digital',value:d,at:now}),focusBook:i=>{indexCalls.push({type:'focus',value:i,at:now});return {x:200,y:300,width:47,height:17,index:i,...options.focusRects?.[i]};},clearFocus:()=>indexCalls.push({type:'clear',at:now}),resize:()=>indexCalls.push({type:'resize',at:now}),destroy(){}};
   const rendered=[];
   class Renderer{
     constructor(){this.last=null;}
@@ -35,7 +35,7 @@ function fixture(startSpread=2,options={}){
     draw(o){this.last=o;el('book').dataset.curlProgress=String(o.progress);}
     hide(){delete el('book').dataset.curlProgress;}
   }
-  const context={console,document:doc,PaperPhysics:Physics,PaperGestures:Gestures,PaperSheetRenderer:Renderer,
+  const context={console,document:doc,PaperPhysics:Physics,PaperGestures:Gestures,PaperBookMaterial:Material,PaperSheetRenderer:Renderer,
     PaperBookIndex:{create:args=>{indexOptions=args;return index;}},PaperImmersion:{setScene(){},showChrome(){},hideChrome(){}},
     performance:{now:()=>now},navigator:{},matchMedia:()=>({matches:!!options.reducedMotion,addEventListener(){},removeEventListener(){}}),
     CustomEvent:class{constructor(type,init={}){this.type=type;this.detail=init.detail;}},Event:class{constructor(type){this.type=type;}},
@@ -195,6 +195,114 @@ test('only a completed single tap toggles immersion while double tap and navigat
   const scale=Number(f.el('stage').dataset.scale);tap();f.advance(120);tap();f.advance(500);
   assert.equal(taps,1,'double tap also toggled chrome');assert.ok(Number(f.el('stage').dataset.scale)>scale,'double tap lost its zoom behavior');
   tap();f.advance(100);f.el('view-edge').onclick();await f.untilScene('edge');assert.equal(taps,1,'old tap toggled chrome during navigation');
+});
+// The camera and cover dimensions are not allowed to masquerade as paper mass.
+function materialState(f){
+  const d=f.el('stage').dataset,m={};
+  for(const key of ['leftSheets','rightSheets','leftDepth','rightDepth','materialSpread']){
+    m[key]=Number(d[key]);assert.ok(Number.isFinite(m[key]),`missing/invalid ${key}: ${d[key]}`);
+  }
+  assert.ok(Math.abs(m.leftSheets+m.rightSheets-627)<.002,'paper sheets were created or lost');
+  assert.ok(Math.abs(m.leftDepth+m.rightDepth-36)<.002,'paper depth was created or lost');
+  return m;
+}
+function closeTo(actual,expected,message){assert.ok(Math.abs(actual-expected)<.002,`${message}: ${actual} != ${expected}`);}
+function latestMaterial(f){return f.indexCalls.filter(c=>c.type==='material').at(-1);}
+function indexWidth(f){
+  const transform=f.el('physical-index-host').style.transform||'',match=transform.match(/scaleX\(([-\d.e+]+)\)/);
+  assert.ok(match,`no material-derived index transform: ${transform}`);return Number(match[1])*480;
+}
+
+test('opening Genesis, Jude and the final spread derives both stacks from their real sheet counts',()=>{
+  for(const [spread,left,right] of [[0,0,627],[1232,616,11],[1252,626,1]]){
+    const f=fixture(spread),m=materialState(f),expected=Material.compute(spread,1254,f.context.BIBLE_DATA.books);
+    closeTo(m.leftSheets,left,'left sheets');closeTo(m.rightSheets,right,'right sheets');
+    closeTo(m.leftDepth,expected.leftDepth,'left depth');closeTo(m.rightDepth,expected.rightDepth,'right depth');
+    closeTo(m.materialSpread,spread,'material spread');
+    assert.ok(latestMaterial(f),'index never received the reading material');
+    closeTo(latestMaterial(f).value.rightSheets,right,'index received stale paper quantity');
+    closeTo(indexWidth(f),expected.rightDepth*.55,'actual right index width');
+    closeTo(parseFloat(f.el('left-reading-edge').style.width),expected.leftDepth*.55,'actual left edge width');
+    closeTo(Number(f.el('left-stack').dataset.paperDepth),expected.leftDepth,'left stack rendered depth');
+    closeTo(Number(f.el('right-stack').dataset.paperDepth),expected.rightDepth,'right stack rendered depth');
+    if(spread===0)assert.equal(f.el('left-stack').style.opacity,'0','zero-sheet side retained a paper slab');
+  }
+});
+test('Jude leaves a subpixel right paper edge and only Jude/Revelation right-side ownership',()=>{
+  const f=fixture(1232),m=materialState(f),state=latestMaterial(f).value;
+  assert.ok(m.rightDepth<.7,'near-end right edge still resembles a whole book');
+  assert.ok(indexWidth(f)<.4,'visible right index kept the constant full-book strip');
+  assert.equal(f.el('physical-index-host').dataset.readingBooks,'JUD,REV');
+  assert.ok(f.el('left-reading-edge').innerHTML.includes('data-book="GEN"'),'previous labels were not moved to the left');
+  assert.ok(m.leftDepth>35,'read pages did not accumulate on the left');
+  assert.deepEqual(Array.from(state.rightBooks,b=>b.code),['JUD','REV']);
+  assert.equal(state.rightBookIndices.length,2);assert.equal(state.leftBookIndices.length,64);
+  assert.ok(!state.rightBookIndices.some(i=>i<39),'Old Testament labels remained on the right');
+});
+test('a forward held leaf continuously transfers conserved thickness without committing the reading page',()=>{
+  const f=fixture(1232),before=materialState(f),saved=f.saved.length,p=f.held();
+  for(const progress of [.1,.3,.55,.8]){
+    f.advance(80);f.drag(p,progress);const m=materialState(f);
+    assert.ok(m.leftSheets>before.leftSheets&&m.leftSheets<before.leftSheets+1);
+    assert.ok(m.rightSheets<before.rightSheets&&m.rightSheets>before.rightSheets-1);
+    assert.equal(f.el('stage').dataset.spread,'1232');assert.equal(f.saved.length,saved,'temporary paper pose was persisted');
+  }
+  f.up(p,.8,'right',true);const restored=materialState(f);
+  for(const key of Object.keys(before))closeTo(restored[key],before[key],`cancel did not restore ${key}`);
+  assert.equal(f.el('stage').dataset.spread,'1232');
+});
+test('reverse leaf motion restores thickness before cancellation and a completed back turn moves one sheet right',()=>{
+  const f=fixture(1232),before=materialState(f),p=f.held();
+  f.advance(100);f.drag(p,.7);const farther=materialState(f);
+  f.advance(160);f.drag(p,.3);const back=materialState(f);
+  assert.ok(back.rightSheets>farther.rightSheets&&back.leftSheets<farther.leftSheets,'paper thickness did not follow the finger back');
+  f.up(p,.3,'right',true);closeTo(materialState(f).rightSheets,before.rightSheets,'cancelled preview');
+  const q=f.held('left');f.advance(150);f.drag(q,.7,'left');const preview=materialState(f);
+  assert.ok(preview.rightSheets>before.rightSheets);f.advance(200);f.up(q,.7,'left');
+  const after=materialState(f);assert.equal(f.el('stage').dataset.spread,'1230');
+  closeTo(after.leftSheets,615,'back-turn left sheets');closeTo(after.rightSheets,12,'back-turn right sheets');
+});
+test('multi-sheet quick turns and the automatic-turn queue conserve material on every sampled frame',()=>{
+  const f=fixture(1160);
+  for(let k=0;k<3;k++){
+    const p=f.at();f.emit('pointerdown',p.x,p.y,1);f.advance(2);f.emit('pointerdown',p.x,p.y+50,2);
+    for(let i=1;i<=12;i++){f.advance(10);f.emit('pointermove',p.x-i*10,p.y,1);f.emit('pointermove',p.x-i*10,p.y+50,2);}
+    f.emit('pointerup',p.x-120,p.y,1);f.emit('pointerup',p.x-120,p.y+50,2);
+    for(let i=0;i<7;i++){f.advance(60);materialState(f);}
+  }
+  assert.deepEqual(f.rendered.map(x=>x.count),[5,10,20]);
+  const before=materialState(f);closeTo(before.leftSheets,615,'bundle leaves');
+  f.el('next').onclick();f.el('next').onclick();
+  for(let i=0;i<80;i++){f.advance(16);materialState(f);}
+  closeTo(materialState(f).leftSheets,617,'queued leaf count');
+});
+test('opening the directory mid-curl rolls material back, and returning keeps the thin Jude edge',async()=>{
+  const f=fixture(1232),before=materialState(f),p=f.held();f.advance(120);f.drag(p,.75);
+  assert.ok(materialState(f).materialSpread>1232);f.el('view-edge').onclick();await f.untilScene('edge');
+  const closed=materialState(f);closeTo(closed.materialSpread,1232,'cancel before closing');
+  closeTo(closed.rightSheets,11,'closed-book camera must not change reading allocation');
+  closeTo(Number(f.el('left-stack').dataset.paperDepth),0,'closed left stack merged');
+  closeTo(Number(f.el('right-stack').dataset.paperDepth),36,'closed right stack assembled');
+  closeTo(indexWidth(f),480,'closed directory full index');
+  assert.ok(f.indexCalls.some(c=>c.type==='material'&&c.assembly>.99),'closed directory never assembled the full book');
+  f.el('scene-back').onclick();await f.untilScene('reading');
+  const after=materialState(f);for(const key of Object.keys(before))closeTo(after[key],before[key],`directory changed ${key}`);
+  assert.ok(latestMaterial(f).assembly<.001,'reading edge did not separate from full-book directory');
+  assert.ok(indexWidth(f)<.4,'directory return resurrected full-book reading edge');
+});
+test('selecting Jude changes material only while closed and opens with the target thin edge',async()=>{
+  const f=fixture(0);f.el('view-edge').onclick();await f.untilScene('edge');const at=f.sceneWrites.length;
+  f.selectBook(64);await f.advanceAsync(80);closeTo(materialState(f).rightSheets,627,'target material changed before focus');
+  await f.untilScene('reading');assert.equal(f.el('stage').dataset.spread,'1232');const m=materialState(f);
+  closeTo(m.leftSheets,616,'target left sheets');closeTo(m.rightSheets,11,'target right sheets');assert.ok(m.rightDepth<.7);
+  const firstTarget=f.sceneWrites.slice(at).find(w=>w.key==='rightSheets'&&Number(w.value)===11);
+  assert.ok(firstTarget,'target material was not applied');assert.ok(firstTarget.progress>.99,'paper allocation changed before the closed cover hid it');
+  assert.deepEqual(Array.from(latestMaterial(f).value.rightBooks,b=>b.code),['JUD','REV']);
+});
+test('zoom and resize do not alter material quantity or resurrect the full right edge',()=>{
+  const f=fixture(1232),before=materialState(f);f.el('focus-right').onclick();f.el('zoom-in').onclick();
+  f.el('stage').clientWidth=390;f.el('stage').clientHeight=844;f.resize();
+  const after=materialState(f);for(const key of Object.keys(before))closeTo(after[key],before[key],`viewport changed ${key}`);
 });
 (async()=>{
   for(const {name,fn} of scenarios){

@@ -4,7 +4,8 @@
   const stage=$('stage'),book=$('book'), papers=[$('left-paper'),$('right-paper')];
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const Physics=window.PaperPhysics;
+  const Physics=window.PaperPhysics, Material=window.PaperBookMaterial;
+  let material=null,leftMarksKey=null;
   let spread=0,scale=1,x=0,y=0,fitScale=1,mode='open',focus='fit',gesture=null;
   let burstState=null,feedbackTimer,demoBusy=false,lastTap=null;
   let fold=null,holdTimer=null,foldFrame=0,queuedTurns=[];
@@ -70,12 +71,13 @@
     if(t!==undefined){f.samples.push({p:f.progress,t});while(f.samples.length>2&&t-f.samples[0].t>140)f.samples.shift();const first=f.samples[0];f.velocity=(f.progress-first.p)/Math.max(1,t-first.t)*1000;}
     sheetRenderer.draw({progress:f.progress,radius:f.radius,grabY:f.grabY,vertical:f.vertical});
     stage.dataset.foldProgress=f.progress.toFixed(4);
+    applyMaterial(Material.sampleTurn(f.from,f.direction,f.count,f.progress,D.pages.length,D.books));
   }
   function finishFold(commit){
     if(!fold)return;const f=fold;cancelAnimationFrame(foldFrame);foldFrame=0;
     sheetRenderer.hide();book.classList.remove('curl-active');papers[f.side].classList.remove('under-curl');fold=null;
     if(commit){spread=f.target;render();save();feedback(`${f.direction>0?'向后':'向前'}翻 ${f.count} 页${f.source==='two'?' · 双指快翻':''}`);}
-    else{papers[f.side].innerHTML=f.original;feedback('轻轻放回 · 仍在原来这一页');}
+    else{papers[f.side].innerHTML=f.original;applyMaterial();feedback('轻轻放回 · 仍在原来这一页');}
     stage.dataset.foldState=commit?'committed':'returned';delete stage.dataset.foldProgress;
     $('touch-ring').style.display='none';$('touch-ring').classList.remove('holding');
     if(queuedTurns.length){const args=queuedTurns.shift();turn(...args);}
@@ -109,10 +111,7 @@
     $('page-label').textContent=spread===0?'卷首 — 1':`${spread} — ${spread+1}`;
     $('progress-label').textContent=`${b.short} · 全书 ${Math.round(progress()*100)}%`;
     const p=progress();
-    $('left-stack').style.transform=`translate(${-p*13}px,${3+p*30}px)`;
-    $('right-stack').style.transform=`translate(${(1-p)*13}px,${3+(1-p)*30}px)`;
-    document.querySelector('.cover-left').style.transform=`translate(${-p*13}px,${p*30}px) skewY(1deg)`;
-    document.querySelector('.cover-right').style.transform=`translate(${(1-p)*13}px,${(1-p)*30}px) skewY(-1deg)`;
+    applyMaterial();
     $('read-block').style.width=`${p*100}%`;
     $('position-pin').style.left=`${p*100}%`;
 
@@ -121,6 +120,44 @@
       const yes=btn.dataset.code===b.code;btn.classList.toggle('current',yes);btn.setAttribute('aria-current',yes?'true':'false');
     });
     stage.dataset.spread=String(spread);stage.dataset.book=b.code;
+  }
+  function drawLeftMarks(m){
+    const key=m.bookStates.map(b=>b.leftShare.toFixed(2)).join(',');if(key===leftMarksKey)return;leftMarksKey=key;
+    let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 704" preserveAspectRatio="none">';
+    m.bookStates.forEach((b,i)=>{
+      if(b.leftShare<=0)return;
+      const group=Math.floor(i/3),lane=Math.floor(group/11),row=group%11;
+      const bx=lane?19:2,by=30+row*59+lane*7+(i%3)*17;
+      svg+=`<g opacity="${b.leftShare.toFixed(3)}" data-book="${D.books[i].code}"><path d="M${bx+14} ${by}H${bx+5}Q${bx} ${by+8} ${bx+5} ${by+16}H${bx+14}Z" fill="${i<39?'#202b2c':'#a74338'}"/><text x="${bx+8}" y="${by+12}" text-anchor="middle" font-size="10" fill="#f3e5b7" font-family="PaperSerif,serif">${esc(D.books[i].short)}</text></g>`;
+    });
+    $('left-reading-edge').innerHTML=svg+'</svg>';
+  }
+  function paintIndexGeometry(f){
+    $('index-placement').style.left=f.indexLeft+'px';
+    $('physical-index-host').style.transform=`rotateY(${f.angle}deg) translateZ(${f.indexZ}px) scaleX(${f.indexScale})`;
+  }
+  function applyMaterial(next,sceneFrame){
+    material=next||Material.compute(spread,D.pages.length,D.books);
+    const f=sceneFrame||window.PaperBookScene.sample(sceneProgress,readPose||capturePose(),view,fitScale,focusRect,focusAmount,material);
+    const joined=f.close,leftDepth=material.leftDepth*(1-joined),rightDepth=material.rightDepth+material.leftDepth*joined;
+    const lx=leftDepth*.55,rx=rightDepth*.55,ly=leftDepth*.85,ry=rightDepth*.85;
+    $('left-stack').style.transform=`translate(${-lx}px,${ly}px)`;
+    $('right-stack').style.transform=`translate(${rx}px,${ry}px)`;
+    document.querySelector('.cover-left').style.transform=`translate(${-lx}px,${ly+2}px)`;
+    document.querySelector('.cover-right').style.transform=`translate(${rx}px,${ry+2}px)`;
+    $('left-stack').style.opacity=leftDepth===0?'0':'1';
+    $('right-stack').style.opacity=rightDepth===0?'0':'1';
+    $('left-reading-edge').style.width=lx+'px';
+    drawLeftMarks(material);
+    index.setReadingMaterial(material,joined);
+    $('physical-index-host').style.setProperty('--reading-assembly',joined.toFixed(4));
+    paintIndexGeometry(f);
+    stage.dataset.materialSpread=material.spread.toFixed(4);
+    stage.dataset.leftSheets=material.leftSheets.toFixed(4);stage.dataset.rightSheets=material.rightSheets.toFixed(4);
+    stage.dataset.leftDepth=material.leftDepth.toFixed(6);stage.dataset.rightDepth=material.rightDepth.toFixed(6);
+    $('left-stack').dataset.paperDepth=leftDepth.toFixed(6);$('right-stack').dataset.paperDepth=rightDepth.toFixed(6);
+    $('left-reading-edge').dataset.books=material.leftBooks.map(b=>b.code).join(',');
+    $('physical-index-host').dataset.readingBooks=material.rightBooks.map(b=>b.code).join(',');
   }
   function constrain(){
     const bounds=G.bounds(view,scale);
@@ -195,12 +232,11 @@
     $('scene-status').textContent=labels[state]||'';
   }
   function paintScene(){
-    const pose=readPose||capturePose(),f=window.PaperBookScene.sample(sceneProgress,pose,view,fitScale,focusRect,focusAmount);
+    const pose=readPose||capturePose(),f=window.PaperBookScene.sample(sceneProgress,pose,view,fitScale,focusRect,focusAmount,material||Material.compute(spread,D.pages.length,D.books));
     book.style.transform=`translate3d(${f.x}px,${f.y}px,0) scale(${f.scale})`;
     $('book-volume').style.transform=`rotateY(${-f.angle}deg) rotateZ(${-2*f.orbit}deg)`;
     $('left-half').style.transform=`rotateY(${180*f.close}deg)`;
-    $('index-placement').style.left=f.indexLeft+'px';
-    $('physical-index-host').style.transform=`rotateY(${f.angle}deg) translateZ(${f.indexZ}px) scaleX(${f.indexScale})`;
+    applyMaterial(Material.compute(spread,D.pages.length,D.books),f);
     index.setProgress(.3+.7*f.orbit);
     stage.dataset.sceneProgress=sceneProgress.toFixed(4);stage.dataset.digitalProgress=digitalProgress.toFixed(4);
   }

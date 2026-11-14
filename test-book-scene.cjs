@@ -76,4 +76,16 @@ for(const view of [{w:0,h:0},{w:1,h:1},{w:240,h:100}])for(const p of [0,.2,.6,.8
   for(const key of keys)check(Number.isFinite(frame[key]),`temporary viewport ${key} stays finite`);
   check(frame.scale>0,'temporary viewport scale stays positive');
 }
+// The same camera can look at different paper masses without inventing thickness.
+{
+  const M=require('./book-material.js'),view=views[1],fit=fitFor(view),pose=poses[0];
+  for(const spread of [0,626,1232,1252]){
+    const material=M.compute(spread,1254),open=sample(0,pose,view,fit,null,0,material),closed=sample(1,pose,view,fit,null,0,material);
+    near(open.indexScale*480,material.rightDepth*.55,'open edge follows remaining paper mass');
+    near(open.indexLeft+240-open.indexScale*240,960,'open edge starts at the paper boundary');
+    near(closed.indexScale,1,'closed full index can expose all labels');
+    const combined=sample(.61,pose,view,fit,null,0,material);
+    near(combined.indexScale*480,(material.rightDepth+material.leftDepth*combined.close)*.55,'closing combines both stacks continuously');
+  }
+}
 console.log(JSON.stringify({sceneGeometryChecks:checks,trajectories:views.length*poses.length*rects.length,samplesPerTrajectory:2001,views:views.length,readingPoses:poses.length,maxCameraStep:Number(maxCameraStep.toFixed(6)),model:'continuous single-book camera'}));

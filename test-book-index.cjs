@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const Index = require('./book-index.js');
+const Material = require('./book-material.js');
 const context = { window: {} };
 vm.runInNewContext(fs.readFileSync(__dirname + '/bible-data.js', 'utf8'), context);
 const books = context.window.BIBLE_DATA.books;
@@ -132,6 +133,64 @@ test('capture selects the visible scrolled label instead of a wrong native neigh
   assert.equal(keyboard.defaultPrevented, false);
   assert.equal(keyboard.immediateStopped, false);
 });
+test('Jude reading exposes only Jude and Revelation labels on the right-hand paper block', () => {
+  const f = fixture(), jude = books.find(book => book.code === 'JUD');
+  const material = Material.compute(jude.first & ~1, context.window.BIBLE_DATA.pages.length, books);
+  f.index.setReadingMaterial(material, 0);
+  f.buttons.forEach((button, i) => {
+    const remains = ['JUD', 'REV'].includes(books[i].code);
+    assert.equal(Number(button.style.opacity), remains ? 1 : 0, books[i].code + ' right label opacity');
+    assert.equal(button.dataset.paperSide, remains ? 'right' : 'left', books[i].code + ' physical side');
+  });
+  const cuts = f.nodes.filter(node => (node.className || '').startsWith('pbi-cut pbi-'));
+  assert.equal(cuts.length, 22);
+  cuts.slice(0, 13).forEach(cut => assert.equal(cut.style.visibility, 'hidden', 'Old Testament cuts are no longer on the right'));
+  cuts.slice(0, 21).forEach(cut => assert.equal(cut.style.visibility, 'hidden'));
+  assert.equal(cuts[21].style.visibility, 'visible', 'the final cut still contains Jude and Revelation');
+  assert.equal(f.root.dataset.rightSheets, '11');
+  assert.equal(f.root.dataset.leftSheets, '616');
+});
+
+test('closing assembles the full index continuously and reopening restores the remaining leaves', () => {
+  const f = fixture(), material = Material.compute(1232, context.window.BIBLE_DATA.pages.length, books);
+  const cuts = f.nodes.filter(node => (node.className || '').startsWith('pbi-cut pbi-'));
+  f.index.setReadingMaterial(material, 0);
+  const readingOpacities = f.buttons.map(button => button.style.opacity);
+  const readingCuts = cuts.map(cut => cut.style.visibility);
+  f.index.setReadingMaterial(material, .5);
+  f.buttons.forEach((button, i) => assert.equal(Number(button.style.opacity), i < 64 ? .5 : 1));
+  cuts.slice(0, 21).forEach(cut => assert.equal(Number(cut.style['--pbi-cut-share']), .5));
+  f.index.setReadingMaterial(material, 1);
+  f.buttons.forEach(button => assert.equal(Number(button.style.opacity), 1, 'closed book exposes every index label'));
+  cuts.forEach(cut => {
+    assert.equal(cut.style.visibility, 'visible');
+    assert.equal(Number(cut.style['--pbi-cut-share']), 1);
+  });
+  f.index.setReadingMaterial(material, 0);
+  assert.deepEqual(f.buttons.map(button => button.style.opacity), readingOpacities);
+  assert.deepEqual(cuts.map(cut => cut.style.visibility), readingCuts);
+});
+
+test('physical focus geometry is invariant under reading ownership and closed-book assembly', () => {
+  const f = fixture(), initial = books.map((book, i) => f.index.focusBook(i));
+  const material = Material.compute(1232, context.window.BIBLE_DATA.pages.length, books);
+  for (const assembly of [0, .25, .5, .75, 1, .5, 0]) {
+    f.index.setReadingMaterial(material, assembly);
+    books.forEach((book, i) => assert.deepEqual(f.index.focusBook(i), initial[i], book.code + ' focus remains on its physical cut'));
+  }
+});
+
+test('Genesis to Jude to closed-book navigation retains all 66 original label nodes', () => {
+  const f = fixture(), original = f.buttons.slice(), pageCount = context.window.BIBLE_DATA.pages.length;
+  for (const spread of [0, 1232, 0, 1232]) {
+    const material = Material.compute(spread, pageCount, books);
+    for (const assembly of [0, .5, 1, .5, 0]) f.index.setReadingMaterial(material, assembly);
+    const current = f.nodes.filter(node => node.tagName === 'button');
+    assert.equal(current.length, 66, 'ownership changes must not build replacement buttons');
+    current.forEach((button, i) => assert.equal(button, original[i]));
+  }
+});
+
 test('destroy removes only the owned surface and all attached listeners', () => {
   const f = fixture(); f.index.destroy(); f.index.destroy();
   assert.equal(f.host.children.length,0);

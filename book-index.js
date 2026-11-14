@@ -132,6 +132,23 @@
       if (e.key === 'Escape' && onClose) { e.preventDefault(); onClose(); }
     });
 
+    function setReadingMaterial(material,assembly=0) {
+      const a=clamp(assembly),states=material.bookStates||[];
+      const share=i=>states[i]?.rightShare??1;
+      buttons.forEach(({button},i)=>{
+        const owned=share(i);button.style.opacity=lerp(owned,1,a).toFixed(4);
+        button.dataset.paperSide=states[i]?.side||'right';
+      });
+      cuts.forEach((cut,i)=>{
+        const owned=Math.max(...model.groups[i].indices.map(share));
+        cut.style.visibility=owned===0&&a===0?'hidden':'visible';
+        cut.style.setProperty('--pbi-cut-share',lerp(owned,1,a).toFixed(4));
+      });
+      marks.style.opacity=a.toFixed(4);
+      root.dataset.rightSheets=String(material.rightSheets);
+      root.dataset.leftSheets=String(material.leftSheets);
+    }
+
     function setProgress(value) {
       progress = clamp(value);
       root.style.setProperty('--pbi-present', progress.toFixed(4));
@@ -205,7 +222,7 @@
     function destroy() { if (destroyed) return; destroyed = true; disposers.forEach(fn => fn()); root.remove(); }
 
     setProgress(1); setDigital(0);
-    return { setProgress, setDigital, focusBook, clearFocus, resize, destroy };
+    return { setReadingMaterial, setProgress, setDigital, focusBook, clearFocus, resize, destroy };
   }
   return { create, groupBooks, geometry, layoutAt, WIDTH, HEIGHT };
 });
