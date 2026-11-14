@@ -1,7 +1,7 @@
 /* Semantic text -> deterministic, viewport-independent paper pages.
  * Only reusable typographic rules live here: no verse-specific coordinates,
- * scanned line breaks, or original-edition page mapping. Missing footnotes
- * and poetic indentation are deliberately not invented in this first pass.
+ * scanned line breaks, or original-edition page mapping. Source poetic lines
+ * are semantic blocks; a shared indentation/wrapping rule lays them out.
  */
 (function(root,factory){
   const api=factory();
@@ -19,6 +19,9 @@
     // so its lower box cannot intrude on the first unindented (third) row.
     CHAPTER_BASELINE_RISE:12*.35,
     VERSE_SIZE:7.5,VERSE_RISE:3,PARAGRAPH_INDENT:2,SPACE_CELLS:.35,
+    // The donor marks q, not q1/q2 levels. These are uniform print rules,
+    // not fabricated source indentation levels or stored physical line ends.
+    POETRY_INDENT:2,POETRY_CONTINUATION_INDENT:3,
     HEADING_GAP_LINES:1,CHAPTER_GAP_LINES:1
   });
   const CLOSED=new Set([...',.;:!?，。；：！？、）］｝〉》」』”’％%…']);
@@ -60,17 +63,40 @@
       for(const [verse,text] of chapter.titles||[]){
         const k=String(verse);if(!titles.has(k))titles.set(k,[]);titles.get(k).push(String(text));
       }
+      const poetry=new Map();
+      const verseTexts=new Map(chapter.verses.map(([v,t])=>[String(v),String(t)]));
+      for(const entry of chapter.poetry||[]){
+        const key=String(entry.verse);
+        if(poetry.has(key)||!verseTexts.has(key)||!Array.isArray(entry.segments)||!entry.segments.length)
+          throw new TypeError('Invalid poetry entry: '+book.code+' '+number+':'+key);
+        for(const segment of entry.segments){
+          if(!['prose','poetry'].includes(segment.kind)||typeof segment.text!=='string'||
+            segment.kind==='poetry'&&(typeof segment.line!=='string'||!segment.line))
+            throw new TypeError('Invalid poetry segment: '+book.code+' '+number+':'+key);
+        }
+        if(entry.segments.map(s=>s.text).join('')!==verseTexts.get(key))
+          throw new TypeError('Poetry structure must preserve scripture text: '+book.code+' '+number+':'+key);
+        poetry.set(key,entry.segments);
+      }
       let current=null,first=true;
       const flush=()=>{if(current?.tokens.length)blocks.push(current);current=null;};
       for(const [verse,raw] of chapter.verses){
         const address=ref(number,verse),heads=titles.get(String(verse));
         if(heads){flush();for(const text of heads)blocks.push({kind:'heading',text,ref:address});}
         if(paragraphs.has(String(verse)))flush();
-        if(!current)current={kind:'body',chapter:first?number:null,ref:address,tokens:[]};
-        // A chapter number represents verse 1; later/exceptional first verse
-        // numbers are kept explicitly, and merged labels remain whole.
-        if(!first||String(verse)!=='1')current.tokens.push(token('verse',String(verse),address,C));
-        for(const ch of String(raw))current.tokens.push(token('body',ch,address,C));
+        const segments=poetry.get(String(verse))||[{kind:'prose',text:String(raw)}];
+        let markerPending=!first||String(verse)!=='1';
+        for(const segment of segments){
+          if(!segment.text)continue;
+          const kind=segment.kind==='poetry'?'poetry':'body',line=kind==='poetry'?segment.line:null;
+          if(current&&(current.kind!==kind||kind==='poetry'&&current.line!==line))flush();
+          if(!current)current={kind,line,chapter:first?number:null,ref:address,tokens:[]};
+          // A chapter number represents verse 1. A verse marker is emitted
+          // only once, even when that verse contains several poetic lines.
+          if(markerPending){current.tokens.push(token('verse',String(verse),address,C));markerPending=false;}
+          for(const ch of segment.text)current.tokens.push(token('body',ch,address,C));
+          first=false;
+        }
         first=false;
       }
       flush();
@@ -109,8 +135,10 @@
     const C=Object.freeze({...constants,...options,COLUMN_X:options.COLUMN_X||constants.COLUMN_X});
     if(!(C.CELL>0&&C.LINE_HEIGHT>0&&C.COLUMN_WIDTH>C.CELL*6&&C.BOTTOM_BASELINE>C.BOOK_HEADING_BASELINE+C.LINE_HEIGHT*4))throw new RangeError('Invalid paper layout rules');
     const pages=[],books=[],warnings=[];
-    const stats={books:source.books.length,chapters:0,verses:0,bodyCharacters:0,headings:0,bodyRows:0,headingRows:0};
-    let page=null,column=0,y=0,bookIndex=-1,chapterSet=null;
+    const stats={books:source.books.length,chapters:0,verses:0,bodyCharacters:0,headings:0,bodyRows:0,headingRows:0,
+      poetryLines:0,poetryRows:0,poetryVerses:0,poetryBooks:0};
+    const poetryLineIds=new Set(),poetryBookIds=new Set();
+    let page=null,column=0,y=0,bookIndex=-1,chapterSet=null,dropCap=null;
     const addSpecial=(name,blank=false)=>{
       pages.push({b:blank?Math.min(source.books.length-1,Math.max(0,bookIndex)):-1,title:'',frontmatter:blank?'':name,blank,
         layoutVersion:2,columnX:C.COLUMN_X,start:'',end:'',cols:[[],[]],displayPage:''});
@@ -131,8 +159,15 @@
       if(row.kind==='body'){
         if(!page.start)page.start=row.start;page.end=row.end;
         stats.bodyRows++;
+        if(row.poetry)stats.poetryRows++;
       }else stats.headingRows++;
       y+=C.LINE_HEIGHT;
+    }
+    // A short first poem line must not skip the next line just because the
+    // drop cap is two rows high. Carry its exclusion slot across body blocks.
+    function finishDropCap(){
+      if(dropCap?.remaining)y+=dropCap.remaining*C.LINE_HEIGHT;
+      dropCap=null;
     }
     for(bookIndex=0;bookIndex<source.books.length;bookIndex++){
       const book=source.books[bookIndex];
@@ -143,11 +178,15 @@
         addSpecial('新约全书');
       }
       const meta={code:book.code,name:book.name,short:book.short,first:pages.length,last:pages.length,chapters:[]};
-      books.push(meta);chapterSet=new Set();newPage(true);
+      books.push(meta);chapterSet=new Set();dropCap=null;newPage(true);
       stats.chapters+=book.chapters.length;
-      for(const ch of book.chapters)for(const [,text] of ch.verses){stats.verses++;stats.bodyCharacters+=[...String(text)].length;}
+      for(const ch of book.chapters){
+        stats.poetryVerses+=(ch.poetry||[]).length;
+        for(const [,text] of ch.verses){stats.verses++;stats.bodyCharacters+=[...String(text)].length;}
+      }
       for(const block of blocksForBook(book,C)){
         if(block.kind==='heading'){
+          finishDropCap();
           stats.headings++;
           const lines=headingLines(block.text,C);
           let gap=previousKind()?C.HEADING_GAP_LINES*C.LINE_HEIGHT:0;
@@ -166,37 +205,44 @@
           continue;
         }
         const isChapter=block.chapter!==null;
-        let reserve=0;
+        const isPoetry=block.kind==='poetry';
+        if(isPoetry){poetryLineIds.add(book.code+':'+block.line);poetryBookIds.add(book.code);}
         if(isChapter){
+          finishDropCap();
           if(previousKind()==='body')y+=C.CHAPTER_GAP_LINES*C.LINE_HEIGHT;
           ensure((C.CHAPTER_LINES-1)*C.LINE_HEIGHT);
-          reserve=Math.max(C.CHAPTER_CELLS*C.CELL,[...String(block.chapter)].length*C.CHAPTER_SIZE*.62+C.CELL*.5);
+          const reserve=Math.max(C.CHAPTER_CELLS*C.CELL,[...String(block.chapter)].length*C.CHAPTER_SIZE*.62+C.CELL*.5);
           if(reserve>=C.COLUMN_WIDTH-C.CELL*2)throw new RangeError('Chapter number leaves no text width');
+          dropCap={reserve,remaining:C.CHAPTER_LINES};
           if(!chapterSet.has(block.chapter)){meta.chapters.push({chapter:block.chapter,page:pages.length-1});chapterSet.add(block.chapter);}
         }
         let at=0,rowIndex=0;
         while(at<block.tokens.length){
           ensure();
-          const indent=isChapter&&rowIndex<C.CHAPTER_LINES?reserve:rowIndex===0?C.PARAGRAPH_INDENT*C.CELL:0;
+          const normalIndent=isPoetry?(rowIndex===0?C.POETRY_INDENT:C.POETRY_CONTINUATION_INDENT)*C.CELL:
+            rowIndex===0?C.PARAGRAPH_INDENT*C.CELL:0;
+          const indent=dropCap?.remaining?Math.max(dropCap.reserve,normalIndent):normalIndent;
           const capacity=C.COLUMN_WIDTH-indent;
           const line=takeLine(block.tokens,at,capacity,C);
-          const row=layoutRuns(block.tokens,at,line.end,indent,capacity,y,line.end===block.tokens.length,C);
+          // Poetic phrases keep natural advances, including wrapped rows.
+          // Justification must never stretch a short poem to column width.
+          const row=layoutRuns(block.tokens,at,line.end,indent,capacity,y,isPoetry||line.end===block.tokens.length,C);
           if(line.overflow)warnings.push({type:'line-overflow',book:book.code,ref:block.tokens[at].ref,page:pages.length-1,column});
-          if(isChapter&&rowIndex===0)row.runs.unshift({kind:'chapter',text:String(block.chapter),x:0,width:reserve-C.CELL*.5,
+          if(isChapter&&rowIndex===0)row.runs.unshift({kind:'chapter',text:String(block.chapter),x:0,width:dropCap.reserve-C.CELL*.5,
             size:C.CHAPTER_SIZE,y:y+(C.CHAPTER_LINES-1)*C.LINE_HEIGHT-C.CHAPTER_BASELINE_RISE,ref:block.ref});
           pushRow({kind:'body',y,runs:row.runs,start:block.tokens[at].ref,end:block.tokens[line.end-1].ref,
-            indent,justified:row.justified,gap:row.gap});
+            indent,justified:row.justified,gap:row.gap,
+            ...(isPoetry?{poetry:true,poetryLine:block.line,poetryContinuation:rowIndex>0}:{})});
+          if(dropCap?.remaining)dropCap.remaining--;
           at=line.end;rowIndex++;
         }
-        // A very short chapter still owns the second drop-cap row; the next
-        // heading/paragraph cannot move underneath its oversized numeral.
-        if(isChapter&&rowIndex<C.CHAPTER_LINES)y+=(C.CHAPTER_LINES-rowIndex)*C.LINE_HEIGHT;
       }
       meta.last=pages.length-1;
     }
     if(pages.length%2)addSpecial('',true);
+    stats.poetryLines=poetryLineIds.size;stats.poetryBooks=poetryBookIds.size;
     return {edition:source.edition||'rules-1',layoutVersion:2,books,pages,stats,warnings,
-      layoutRules:C,notice:'统一规则文本试排；未补齐页底引注与诗行标记，页码不等同纸本。'};
+      layoutRules:C,notice:'统一规则文本试排；已有诗行按语义分行，页底引注未补齐，页码不等同纸本。'};
   }
   return {constants,characterWidth,boundaryAllowed,takeLine,headingLines,paginate};
 });

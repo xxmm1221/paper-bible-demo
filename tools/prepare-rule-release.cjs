@@ -4,11 +4,22 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const root=path.resolve(__dirname,'..'),local=path.join(root,'local-data');
 const source=require(path.join(local,'bible-source.js'));
 const output={edition:source.edition,books:source.books.map(b=>({code:b.code,name:b.name,short:b.short,
-  chapters:b.chapters.map(c=>({chapter:c.chapter,verses:c.verses,titles:c.titles,paragraphs:c.paragraphs}))}))};
-const content=s=>JSON.stringify(s.books.map(b=>b.chapters.map(c=>[c.chapter,c.verses,c.titles,c.paragraphs])));
+  chapters:b.chapters.map(c=>({chapter:c.chapter,verses:c.verses,titles:c.titles,paragraphs:c.paragraphs,...(c.poetry?{poetry:c.poetry}:{})}))}))};
+const content=s=>JSON.stringify(s.books.map(b=>b.chapters.map(c=>[c.chapter,c.verses,c.titles,c.paragraphs,c.poetry])));
 assert.equal(content(output),content(source),'publishing must not change any source text');
+for(const b of output.books)for(const c of b.chapters){
+  const verses=new Map(c.verses),seen=new Set();
+  for(const p of c.poetry||[]){
+    assert.ok(!seen.has(p.verse),'duplicate semantic verse');seen.add(p.verse);
+    assert.equal(p.segments.map(s=>s.text).join(''),verses.get(p.verse),'poetry must partition the unchanged verse text');
+    for(const s of p.segments){
+      assert.ok(s.kind==='prose'||s.kind==='poetry','only semantic prose/poetry kinds are allowed');
+      if(s.kind==='poetry')assert.ok(typeof s.line==='string'&&s.line.length>0,'poetry line needs a stable source identifier');
+    }
+  }
+}
 fs.mkdirSync(path.join(root,'data'),{recursive:true});
-const script='/* Semantic scripture source; layout is computed from shared rules, not stored line breaks. */\n'+
+const script='/* Semantic scripture source and poetic-line boundaries; physical wrapping and pagination are computed from shared rules. */\n'+
   "(function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory();else root.BIBLE_SOURCE=factory();})(typeof window!=='undefined'?window:globalThis,function(){return "+JSON.stringify(output)+';});\n';
 fs.writeFileSync(path.join(root,'data','bible-source.js'),script);
 let css=fs.readFileSync(path.join(local,'fonts-extra.css'),'utf8');

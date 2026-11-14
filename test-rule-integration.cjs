@@ -78,7 +78,9 @@ function mockCanvas(){
   };
   return {canvas:{getContext:()=>ctx},calls,stack,scales};
 }
-const sampleIndices=[0,...['GEN','PSA','COL','JUD','REV'].map(code=>D.books.find(b=>b.code===code).first),D.pages.length-1];
+const E=require('./paper-edition.js');
+const sampleIndices=[...new Set([0,...['GEN','PSA','COL','JUD','REV'].map(code=>D.books.find(b=>b.code===code).first),
+  ...[['GEN','2:23'],['GEN','3:14'],['PSA','23:1'],['PSA','87:1']].map(([book,ref])=>E.locate(D,book,ref)),D.pages.length-1])];
 for(const pageIndex of sampleIndices){
   const page=D.pages[pageIndex],commands=Page.commands(page,pageIndex,D.books),svg=Page.svg(page,pageIndex,D.books);
   assert.doesNotMatch(svg,/textLength|lengthAdjust|spacingAndGlyphs|scaleX/);

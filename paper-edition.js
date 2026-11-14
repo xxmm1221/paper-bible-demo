@@ -8,6 +8,9 @@
 })(typeof window!=='undefined'?window:globalThis,function(){
   'use strict';
   const POSITION='paper-bible-position-v1';
+  // Pagination changes when semantic poetry is restored. Prefer the latest
+  // published edition's scripture anchor, never reinterpret its page number.
+  const PREVIOUS_EDITIONS={'rules-2':['rules-1']};
   const reference=value=>{const m=/^(\d+):(\d+)/.exec(String(value||''));return m?[Number(m[1]),Number(m[2])]:null;};
   const order=ref=>ref[0]*1000+ref[1];
   function locate(data,bookName,ref){
@@ -47,6 +50,17 @@
           const stored=storage?.getItem(key+suffix);
           if(stored!==null&&stored!==undefined)return stored;
           if(cache.has(key))return cache.get(key);
+          for(const edition of PREVIOUS_EDITIONS[data.edition]||[]){
+            const previous=storage?.getItem(key+':'+edition);
+            if(previous===null||previous===undefined)continue;
+            const old=JSON.parse(previous);
+            // A deletion in a newer edition must not resurrect a legacy ribbon.
+            const migrated=key===POSITION
+              ?(old?.bookName&&old?.ref?migratePosition(old,null,data):null)
+              :/^paper-bible-ribbon-v1-[01]$/.test(key)?migrateRibbon(old,data):null;
+            const result=migrated?JSON.stringify(migrated):'null';
+            cache.set(key,result);return result;
+          }
           const old=JSON.parse(storage?.getItem(key)||'null');
           const migrated=key===POSITION?migratePosition(old,legacy,data):/^paper-bible-ribbon-v1-[01]$/.test(key)?migrateRibbon(old,data):null;
           const result=migrated?JSON.stringify(migrated):null;cache.set(key,result);return result;

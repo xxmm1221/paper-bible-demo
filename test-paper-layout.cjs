@@ -68,11 +68,12 @@ const triple=sourceFor([[1,'甲乙丙丁戊己庚辛壬癸'.repeat(8)]],{chapter
 const tripleData=L.paginate(triple);verify(tripleData,triple);
 assert(tripleData.pages[1].cols[0][0].indent>36,'three-digit chapter has its own sufficient slot');
 
-// Full source is deliberately local-only. CI can exercise the rule engine
-// using the above fixtures without publishing app-derived source material.
+// Exercise the same sanitized semantic source shipped to the public reader.
+// The fixtures above also work without the optional full-corpus asset.
 const fs=require('node:fs');
-if(fs.existsSync(__dirname+'/data/bible-source.js')){
-  const full=require('./data/bible-source.js'),started=performance.now(),data=L.paginate(full);
+const sourcePath=process.env.PAPER_SOURCE_PATH||__dirname+'/data/bible-source.js';
+if(fs.existsSync(sourcePath)){
+  const full=require(sourcePath),started=performance.now(),data=L.paginate(full);
   const report=verify(data,full);
   assert.equal(data.books.length,66);assert.equal(data.stats.chapters,1189);
   assert.equal(data.pages[data.books.find(b=>b.code==='MAT').first].displayPage%2,1,'Matthew starts on the right');
