@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "纸页 · 圣经阅读",
+  "short_name": "纸页",
+  "description": "固定纸页、双栏对开与书侧索引，保留经文的空间记忆。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eee9df",
+  "theme_color": "#eee9df",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
