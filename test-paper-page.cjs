@@ -16,7 +16,7 @@ function attrs(source){const result={};for(const match of source.matchAll(/([\w:
 function svgTexts(markup){return [...markup.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)].map(m=>({attrs:attrs(m[1]),text:decode(m[2])}));}
 const sourceBody=page=>page.cols.flatMap(col=>col.flatMap(row=>row.filter(run=>run[0]==='t').map(run=>run[1]))).join('');
 const readable=text=>text.replace(/ /g,''); // ASCII layout separators are not verse characters.
-const indices=[907,D.books.find(b=>b.code==='OBA').first,D.books.find(b=>b.code==='PSA').chapters.find(c=>c.chapter===119).page,618,0];
+const indices=[907,D.books.find(b=>b.code==='OBA').first,1175,D.books.find(b=>b.code==='PSA').chapters.find(c=>c.chapter===119).page,618,0];
 function mockCanvas(){
   const calls=[],scales=[],stack=[];
   const ctx={font:'10px serif',fillStyle:'#000',textAlign:'left',textBaseline:'alphabetic',lineWidth:1,
@@ -85,6 +85,54 @@ test('round punctuation and short runs are not given content-dependent glyph siz
   assert.equal(new Set(glyphs.map(c=>c.size)).size,1);
   assert.doesNotMatch(Page.svg(p,1,D.books),/textLength|lengthAdjust|spacingAndGlyphs/);
   const f=mockCanvas();Page.paint(f.canvas,p,1,D.books,2);assert.deepEqual(f.scales,[[2,2]]);
+});
+
+test('Colossians 1175 keeps Timothy separate from verse 2 and the period before verse 15 natural',()=>{
+  // User-reported page, not a synthetic punctuation-only fixture. Pin the
+  // source row as well as independent page coordinates: the old whole-run
+  // textLength formula overran both of these source slots by 9.1 page units.
+  const index=1175,page=D.pages[index];
+  assert.equal(D.books[page.b].code,'COL');
+  assert.equal(D.books[page.b].first,index,'the reported book must not move');
+  assert.equal(JSON.stringify(page.cols[0][1]),JSON.stringify([
+    ['t','使徒的保罗和兄弟提摩太 ',0],['v','2',11.35],['t','写',12.25]
+  ]));
+  assert.equal(JSON.stringify(page.cols[1][0]),JSON.stringify([
+    ['t','。 ',0],['v','15',1.35],['t','爱子是那不能看见之　神',2.51]
+  ]));
+  const cmds=Page.commands(page,index,D.books);
+  const tai=cmds.find(c=>c.role==='body'&&c.column===0&&c.row===1&&c.text==='太');
+  const verse2=cmds.find(c=>c.role==='verse'&&c.column===0&&c.row===1&&c.text==='2');
+  const write=cmds.find(c=>c.role==='body'&&c.column===0&&c.row===1&&c.text==='写');
+  assert.ok(tai&&verse2&&write,'each glyph and verse number has its own command');
+  near(tai.x,172,'Timothy final character uses its original cell');
+  near(verse2.x,197.2,'verse 2 remains centred in its own source slot');
+  near(write.x,203.5,'following scripture position remains unchanged');
+  near(tai.y,108,'fixed body baseline');near(verse2.y,105,'verse number is raised');
+  // This is a conservative em-box/slot budget, not a substitute for checking
+  // actual glyph ink in a browser with the loaded font.
+  const verse2Left=verse2.x-verse2.slotWidth/2;
+  assert.ok(verse2Left-(tai.x+tai.size)>=5.8,'Timothy em-box must clear the verse-number slot');
+  assert.ok(verse2.size<verse2.slotWidth,'one verse digit has space inside its own slot');
+  near(verse2.x+verse2.slotWidth/2,write.x,'verse slot ends before the next scripture glyph');
+
+  const period=cmds.find(c=>c.role==='body'&&c.column===1&&c.row===0&&c.run===0&&c.text==='。');
+  const verse15=cmds.find(c=>c.role==='verse'&&c.column===1&&c.row===0&&c.text==='15');
+  assert.ok(period&&verse15,'reported punctuation and verse 15 remain on their fixed row');
+  near(period.x,250,'period at original right-column origin');
+  near(verse15.x,277.02,'verse 15 centred in original slot');
+  assert.equal(period.size,tai.size,'punctuation uses the same natural font size as scripture');
+  assert.equal(period.family,tai.family,'punctuation uses the same loaded scripture face');
+  assert.ok(verse15.x-verse15.slotWidth/2-(period.x+period.size)>=5.8,'period em-box clears verse 15 slot');
+
+  const svg=Page.svg(page,index,D.books),texts=svgTexts(svg);
+  const renderedPeriod=texts.find(t=>t.text==='。'&&Number(t.attrs.x)===250&&Number(t.attrs.y)===90);
+  assert.ok(renderedPeriod,'period is rendered as one natural glyph, not in a fitted run');
+  assert.doesNotMatch(svg,/textLength|lengthAdjust|spacingAndGlyphs|transform\s*=|font-stretch/i);
+  const f=mockCanvas();Page.paint(f.canvas,page,index,D.books,2);
+  const paintedPeriod=f.calls.find(c=>c.text==='。'&&c.x===250&&c.y===90);
+  assert.ok(paintedPeriod,'curved-sheet texture paints the same standalone period');
+  assert.deepEqual(f.scales,[[2,2]],'no extra horizontal scaling of the punctuation texture');
 });
 
 test('text escaping is safe and does not alter literal command characters',()=>{
