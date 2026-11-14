@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const Release=require('./reader-release.js');
 const html=fs.readFileSync(__dirname+'/index.html','utf8');
 assert.match(html,new RegExp('data-reader-build="'+Release.VERSION+'"'));
-assert.match(html,new RegExp('排版版本 · '+Release.VERSION));
+assert.match(html,new RegExp('体验版本 · '+Release.VERSION));
 let assets=0;
 for(const match of html.matchAll(/(?:src|href)="([^"#]+\.(?:js|css)(?:\?[^"#]*)?)"/g)){
   const url=new URL(match[1],'https://example.test/paper-bible-demo/');

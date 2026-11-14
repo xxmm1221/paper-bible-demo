@@ -1,0 +1,7 @@
+/* Each host sits at the page origin, never translated by the paper depth.
+   Only the small SVG contour outside the page describes the leaf block. */
+.paper-edge-host{position:absolute;left:0;top:0;width:480px;height:704px;pointer-events:none;z-index:1;overflow:visible;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform-style:flat}
+.paper-edge-host .paper-edge-art{display:block;width:480px;height:704px;overflow:visible;pointer-events:none;filter:drop-shadow(0 1.3px 1.8px #352a2126)}
+.paper-edge-host .pe-paper-mass,.paper-edge-host .pe-leaf-line,.paper-edge-host .pe-leaf-light{shape-rendering:geometricPrecision}
+/* Fine strata are intentionally low contrast, even when zoomed in. */
+@media(prefers-contrast:more){.paper-edge-host .pe-leaf-line{stroke:#7c715f}}

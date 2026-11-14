@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="paper-immersive" data-reader-scene="reading" data-reader-chrome="hidden" data-paper-scene="reading" data-reader-build="type-2">
+<html lang="zh-CN" class="paper-immersive" data-reader-scene="reading" data-reader-chrome="hidden" data-paper-scene="reading" data-reader-build="physical-3">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -7,17 +7,19 @@
   <meta name="description" content="固定纸页、双栏对开、书侧索引与真实阅读进度。一个保留经文空间记忆的圣经阅读体验原型。">
   <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="app-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>纸页 · 圣经阅读实验</title>
-  <link rel="stylesheet" href="fonts.css?v=type-2">
-  <link rel="stylesheet" href="style.css?v=type-2">
-  <link rel="stylesheet" href="book-index.css?v=type-2"><link rel="stylesheet" href="book-scene.css?v=type-2"><link rel="stylesheet" href="immersion.css?v=type-2">
-  <script src="book-material.js?v=type-2" defer></script><script src="book-scene.js?v=type-2" defer></script><script src="book-index.js?v=type-2" defer></script>
-  <script src="bible-data.js?v=type-2" defer></script>
-  <script src="paper-typography.js?v=type-2" defer></script><script src="paper-page.js?v=type-2" defer></script>
-  <script src="gesture-core.js?v=type-2" defer></script>
-  <script src="paper-physics.js?v=type-2" defer></script>
-  <script src="paper-renderer.js?v=type-2" defer></script>
-  <script src="app.js?v=type-2" defer></script><script src="immersion.js?v=type-2" defer></script>
-  <script src="reader-release.js?v=type-2" defer></script>
+  <link rel="stylesheet" href="fonts.css?v=physical-3">
+  <link rel="stylesheet" href="style.css?v=physical-3">
+  <link rel="stylesheet" href="book-index.css?v=physical-3"><link rel="stylesheet" href="book-scene.css?v=physical-3"><link rel="stylesheet" href="immersion.css?v=physical-3">
+  <script src="book-material.js?v=physical-3" defer></script><script src="book-scene.js?v=physical-3" defer></script><script src="book-index.js?v=physical-3" defer></script>
+  <script src="bible-data.js?v=physical-3" defer></script>
+  <script src="paper-typography.js?v=physical-3" defer></script><script src="paper-page.js?v=physical-3" defer></script>
+  <script src="gesture-core.js?v=physical-3" defer></script>
+  <script src="paper-physics.js?v=physical-3" defer></script>
+  <script src="paper-renderer.js?v=physical-3" defer></script>
+  <script src="paper-edges.js?v=physical-3" defer></script><script src="ribbon-bookmarks.js?v=physical-3" defer></script>
+  <link rel="stylesheet" href="paper-edges.css?v=physical-3"><link rel="stylesheet" href="ribbon-bookmarks.css?v=physical-3">
+  <script src="app.js?v=physical-3" defer></script><script src="immersion.js?v=physical-3" defer></script>
+  <script src="reader-release.js?v=physical-3" defer></script>
 </head>
 <body data-paper-scene="reading">
 <header class="masthead">
@@ -49,10 +51,9 @@
         <div class="surface-caption" id="surface-caption">一张固定的版面，一段熟悉的位置</div>
         <div class="book" id="book">
           <div class="book-volume" id="book-volume">
-            <div class="cover cover-right"></div><div class="page-stack right-stack" id="right-stack"></div>
-            <article class="paper right-paper" id="right-paper" aria-label="右页"></article>
-            <div class="left-half" id="left-half"><div class="cover cover-left"></div><div class="page-stack left-stack" id="left-stack"></div><div class="left-reading-edge" id="left-reading-edge" aria-hidden="true"></div><article class="paper left-paper" id="left-paper" aria-label="左页"></article><div class="front-cover" aria-hidden="true"><span class="cover-cross">†</span><strong>圣经</strong><small>HOLY BIBLE</small></div></div>
-            <div class="gutter"></div><div class="ribbon" aria-hidden="true"></div>
+            <div class="right-half" id="right-half"><div class="cover cover-right"></div><div class="page-stack right-stack" id="right-stack"></div><div id="right-paper-edges" class="natural-paper-edge" aria-hidden="true"></div><article class="paper right-paper" id="right-paper" aria-label="右页"></article><button class="paper-edge-hit edge-hit-right" id="right-edge-open" aria-label="点按右侧页边，合拢查看书侧目录" title="点按页边，查看目录"></button></div>
+            <div class="left-half" id="left-half"><div class="cover cover-left"></div><div class="page-stack left-stack" id="left-stack"></div><div class="left-reading-edge" id="left-reading-edge" aria-hidden="true"></div><div id="left-paper-edges" class="natural-paper-edge" aria-hidden="true"></div><article class="paper left-paper" id="left-paper" aria-label="左页"></article><button class="paper-edge-hit edge-hit-left" id="left-edge-open" aria-label="点按左侧页边，合拢查看书侧目录" title="点按页边，查看目录"></button></div>
+            <div class="gutter"></div><div id="ribbon-bookmarks" class="ribbon-bookmarks"></div>
             <div class="index-placement" id="index-placement"><div class="physical-index-host" id="physical-index-host"></div></div>
           </div>
         </div>
@@ -62,7 +63,7 @@
         <div class="scene-topbar"><button id="scene-back">← 回到阅读</button><span id="scene-status" role="status">沿着书侧，找回那一卷</span></div>
         <div class="scene-bottom"><div class="scene-chapter-list" id="scene-chapter-list" hidden></div><div class="scene-actions"><button id="scene-digital" aria-pressed="false">展开为数字目录</button><button id="scene-chapters">当前卷章节</button></div><p>黑金 · 旧约　朱红 · 新约<br>同一组标签，从纸页走向数字，再回到纸页。</p></div>
       </div>
-      <div class="gesture-feedback" id="gesture-feedback" role="status" aria-live="polite">长按纸页约半秒，再慢慢掀开</div>
+      <div class="gesture-feedback" id="gesture-feedback" role="status" aria-live="polite">点按页边看目录 · 红丝带可夹页</div>
       <div class="viewport-map" id="viewport-map" aria-hidden="true"><div class="map-fold"></div><div id="map-window"></div></div>
     </div>
     <div class="reading-tools" id="reading-tools">
@@ -76,7 +77,7 @@
     </footer>
   </section>
 </main>
-<dialog id="about-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">关于这次实验</div><h2>位置不动，<br>只是换一种拿书的方式。</h2><p>手机上，放大并移动观看；平板横屏，完整展开两页。经文不会随屏幕宽度重新排版。</p><p>左右书页堆叠与底部厚度条对应全书位置。点「目录」后，书会合起并转向纸边。66 卷标签按三个一组落在半圆切口中；可展开为数字目录，选卷后回到对应切口，再打开书。</p><p class="notice">本版为参考小开本双栏风格的体验排版，并非某一印刷版的扫描复刻。后续接入你提供的扫描版，才能与实体书页码、行文位置一一对应。</p><p id="reader-version">排版版本 · type-2<br><a id="reader-reload" href="?v=type-2">重新载入最新版</a>（保留阅读位置）</p><div class="sources"><a href="https://www.bibleinmylanguage.com/chinese-bible-midsize-black-black-pvc-covered-chinese-union-version-the-most-popular-bible-in-mainland-china-with-thumb-index-golden-letters-on-cover-red-edges-cuv-holy-bible/" target="_blank" rel="noreferrer">内页风格参考 ↗</a><a href="https://ebible.org/cmn-cu89s/copyright.htm" target="_blank" rel="noreferrer">经文来源：eBible 和合本（公版标注）↗</a></div></dialog>
-<dialog id="help-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">手势小抄 · 可逆的翻页</div><h2>先捏住这张纸，<br>再决定要不要翻过去。</h2><dl><dt>长按约半秒，再慢慢拖</dt><dd>右页向左掀，左页向右掀。从触点到书脊之间会弯起，下面的下一页逐渐露出；手指往回走，纸页就跟着退回。</dd><dt>松手放下</dt><dd>翻过中间或向前甩出时完成翻页；没过中间或明显往回拖时回落。只掀开偷看，不会改变页码。中途添加第二根手指会放回纸页，转为缩放。</dd><dt>直接单指慢拖</dt><dd>不先长按，仍然是移动整本书，不会进入掀页。</dd><dt>单指 / 双指快滑</dt><dd>单指翻 1 页；双指先翻 5 页，1.25 秒内连续同向快滑加速到 10、20 页。都用弯曲纸页过渡。</dd><dt>双指张开 / 合拢</dt><dd>缩放整本书；本次触摸不会误触发翻页。</dd><dt>鼠标与演示</dt><dd>按住鼠标约半秒再拖，也能掀页；点击工具栏「掀页演示」可看一次掀开、偷看、放回的完整过程。Esc 可放回纸页。</dd></dl><p class="notice">“翻 1 页”按翻动一张纸计算，即下一组对开。当前为轻量曲面纸张模拟，并非完整纸张力学仿真；不同手机的多指手感仍需真机体验。</p></dialog>
+<dialog id="about-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">关于这次实验</div><h2>位置不动，<br>只是换一种拿书的方式。</h2><p>手机上，放大并移动观看；平板横屏，完整展开两页。经文不会随屏幕宽度重新排版。</p><p>左右书页堆叠与底部厚度条对应全书位置。点按左右页边，书会从两边向中间合拢，直接露出书侧目录，不经过封面。66 卷标签按三个一组落在半圆切口中；可展开为数字目录，选卷后回到对应切口，再从那一页向两边展开。两根红色丝带可独立夹页，点丝带尾端设置或回到书签。</p><p class="notice">本版为参考小开本双栏风格的体验排版，并非某一印刷版的扫描复刻。后续接入你提供的扫描版，才能与实体书页码、行文位置一一对应。</p><p id="reader-version">体验版本 · physical-3<br><a id="reader-reload" href="?v=physical-3">重新载入最新版</a>（保留阅读位置）</p><div class="sources"><a href="https://www.bibleinmylanguage.com/chinese-bible-midsize-black-black-pvc-covered-chinese-union-version-the-most-popular-bible-in-mainland-china-with-thumb-index-golden-letters-on-cover-red-edges-cuv-holy-bible/" target="_blank" rel="noreferrer">内页风格参考 ↗</a><a href="https://ebible.org/cmn-cu89s/copyright.htm" target="_blank" rel="noreferrer">经文来源：eBible 和合本（公版标注）↗</a></div></dialog>
+<dialog id="help-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><div class="eyebrow">手势小抄 · 可逆的翻页</div><h2>先捏住这张纸，<br>再决定要不要翻过去。</h2><dl><dt>长按约半秒，再慢慢拖</dt><dd>右页向左掀，左页向右掀。从触点到书脊之间会弯起，下面的下一页逐渐露出；手指往回走，纸页就跟着退回。</dd><dt>松手放下</dt><dd>翻过中间或向前甩出时完成翻页；没过中间或明显往回拖时回落。只掀开偷看，不会改变页码。中途添加第二根手指会放回纸页，转为缩放。</dd><dt>直接单指慢拖</dt><dd>不先长按，仍然是移动整本书，不会进入掀页。</dd><dt>单指 / 双指快滑</dt><dd>单指翻 1 页；双指先翻 5 页，1.25 秒内连续同向快滑加速到 10、20 页。都用弯曲纸页过渡。</dd><dt>双指张开 / 合拢</dt><dd>缩放整本书；本次触摸不会误触发翻页。</dd><dt>点按页边</dt><dd>点左右纸页的外侧边缘，两边一起向中轴合拢，直接露出书侧目录。选卷后，从对应位置重新向两边展开；拖动页边仍只平移。</dd><dt>两根红丝带</dt><dd>点书底的丝带尾端，可分别夹住当前页、回到已夹位置、改夹或取出。书签保存在本浏览器；放大后看不到丝带时，可在阅读工具中打开「丝带书签」。</dd><dt>鼠标与演示</dt><dd>按住鼠标约半秒再拖，也能掀页；点击工具栏「掀页演示」可看一次掀开、偷看、放回的完整过程。Esc 可放回纸页。</dd></dl><p class="notice">“翻 1 页”按翻动一张纸计算，即下一组对开。当前为轻量曲面纸张模拟，并非完整纸张力学仿真；不同手机的多指手感仍需真机体验。</p></dialog>
 
 </body></html>

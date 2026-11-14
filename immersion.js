@@ -147,17 +147,15 @@
     initialized = true;
     document.body.insertAdjacentHTML('beforeend', `
       <div class="immersion-dock" id="immersion-dock" role="group" aria-label="阅读入口">
-        <button id="immersion-directory" class="immersion-quiet-button" aria-label="合起书，查看书侧目录" title="书侧目录">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h12a2 2 0 0 1 2 2V20H6a2 2 0 0 1-2-2V5.5a1 1 0 0 1 1-1Z"/><path d="M7 4.5V20M15 8h4M15 11.5h4M15 15h4"/></svg><span>目录</span>
-        </button>
         <button id="immersion-menu" class="immersion-quiet-button" aria-label="展开阅读工具" aria-expanded="false" aria-controls="reading-tools immersion-extra">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg><span class="immersion-sr-only">阅读工具</span>
         </button>
       </div>
       <div id="immersion-extra" class="immersion-extra" role="group" aria-label="沉浸阅读设置">
+        <button id="immersion-directory" type="button" aria-label="合起书，查看书侧目录">书侧目录</button>
         <button id="immersion-fullscreen" type="button" aria-pressed="false">全屏阅读</button>
         <button id="immersion-install" type="button">添加到主屏幕</button>
-        <button id="immersion-about" type="button">关于</button>
+        <button id="immersion-ribbons" type="button">丝带书签</button><button id="immersion-about" type="button">关于</button>
       </div>
       <dialog id="immersion-install-dialog" class="immersion-install-dialog" aria-labelledby="immersion-install-title">
         <button class="dialog-close" id="immersion-install-close" aria-label="关闭主屏幕说明">×</button>
@@ -189,6 +187,7 @@
     installButton.addEventListener('click', () => openInstallGuide());
     document.getElementById('immersion-install-close').addEventListener('click', () => installDialog.close());
     installDialog.addEventListener('close', () => scheduleHide());
+    document.getElementById('immersion-ribbons').addEventListener('click',()=>{hideChrome();window.dispatchEvent(new CustomEvent('paper-ribbons-request'));});
     document.getElementById('immersion-about').addEventListener('click', () => {
       document.getElementById('about-open')?.click();
     });

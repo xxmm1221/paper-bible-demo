@@ -44,3 +44,19 @@ body[data-paper-scene='directory'] .viewport-map,body[data-paper-scene='director
 .physical-index-host .pbi-leather{opacity:var(--reading-assembly)}
 .physical-index-host .pbi-paper-block{inset:calc(var(--reading-assembly)*6px) calc(var(--reading-assembly)*9px) calc(var(--reading-assembly)*13px) calc(var(--reading-assembly)*7px);border-radius:calc(1px + var(--reading-assembly)*6px);box-shadow:none}
 .physical-index-host .pbi-lower-edge{opacity:var(--reading-assembly)}
+
+/* Two halves meet at the spine; no cover presentation and no whole-book orbit. */
+.book{perspective-origin:480px 352px}
+.book-volume{transform-origin:480px 352px}
+.right-half{position:absolute;left:480px;top:0;width:480px;height:704px;transform-origin:left center;transform-style:preserve-3d;z-index:3}
+.right-half .right-paper,.right-half .right-stack{left:0}
+.right-half .paper{backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.left-half .cover,.right-half .cover,.left-half .page-stack,.right-half .page-stack,.left-reading-edge,.front-cover{display:none}
+.left-paper{border-radius:3px 0 0 5px;box-shadow:0 .4px .8px #62543a20}
+.right-paper{border-radius:0 3px 5px 0;box-shadow:0 .4px .8px #62543a20}
+.paper-edge-hit{position:absolute;top:0;height:704px;width:var(--edge-hit-size,24px);padding:0;border:0;background:transparent;box-shadow:none;z-index:7;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent}
+.edge-hit-left{left:0;transform:translateX(-55%)}
+.edge-hit-right{right:0;transform:translateX(55%)}
+.paper-edge-hit:focus-visible{outline:1px solid #aa735b;outline-offset:2px;background:#bf935b12}
+body[data-paper-scene='directory'] .paper-edge-hit{pointer-events:none;visibility:hidden}
+.stage[data-scene='reading'] .physical-index-host{opacity:0!important}

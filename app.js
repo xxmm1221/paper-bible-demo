@@ -5,7 +5,7 @@
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const Physics=window.PaperPhysics, Material=window.PaperBookMaterial;
-  let material=null,leftMarksKey=null;
+  let material=null,ribbons=null;
   let spread=0,scale=1,x=0,y=0,fitScale=1,mode='open',focus='fit',gesture=null;
   let burstState=null,feedbackTimer,demoBusy=false,lastTap=null;
   let fold=null,holdTimer=null,foldFrame=0,queuedTurns=[];
@@ -89,26 +89,17 @@
       const yes=btn.dataset.code===b.code;btn.classList.toggle('current',yes);btn.setAttribute('aria-current',yes?'true':'false');
     });
     stage.dataset.spread=String(spread);stage.dataset.book=b.code;
-  }
-  function drawLeftMarks(m){
-    const key=m.bookStates.map(b=>b.leftShare.toFixed(2)).join(',');if(key===leftMarksKey)return;leftMarksKey=key;
-    let svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 704" preserveAspectRatio="none">';
-    m.bookStates.forEach((b,i)=>{
-      if(b.leftShare<=0)return;
-      const group=Math.floor(i/3),lane=Math.floor(group/11),row=group%11;
-      const bx=lane?19:2,by=30+row*59+lane*7+(i%3)*17;
-      svg+=`<g opacity="${b.leftShare.toFixed(3)}" data-book="${D.books[i].code}"><path d="M${bx+14} ${by}H${bx+5}Q${bx} ${by+8} ${bx+5} ${by+16}H${bx+14}Z" fill="${i<39?'#202b2c':'#a74338'}"/><text x="${bx+8}" y="${by+12}" text-anchor="middle" font-size="10" fill="#f3e5b7" font-family="PaperSerif,serif">${esc(D.books[i].short)}</text></g>`;
-    });
-    $('left-reading-edge').innerHTML=svg+'</svg>';
+    ribbons?.update();
   }
   function paintIndexGeometry(f){
     $('index-placement').style.left=f.indexLeft+'px';
-    $('physical-index-host').style.transform=`rotateY(${f.angle}deg) translateZ(${f.indexZ}px) scaleX(${f.indexScale})`;
+    $('physical-index-host').style.opacity=String(f.indexOpacity);
+    $('physical-index-host').style.transform=`translateZ(${f.indexZ}px) scaleX(${f.indexScale})`;
   }
   function applyMaterial(next,sceneFrame){
     material=next||Material.compute(spread,D.pages.length,D.books);
     const f=sceneFrame||window.PaperBookScene.sample(sceneProgress,readPose||capturePose(),view,fitScale,focusRect,focusAmount,material);
-    const joined=f.close,leftDepth=material.leftDepth*(1-joined),rightDepth=material.rightDepth+material.leftDepth*joined;
+    const joined=f.close,leftDepth=material.leftDepth,rightDepth=material.rightDepth;
     const lx=leftDepth*.55,rx=rightDepth*.55,ly=leftDepth*.85,ry=rightDepth*.85;
     $('left-stack').style.transform=`translate(${-lx}px,${ly}px)`;
     $('right-stack').style.transform=`translate(${rx}px,${ry}px)`;
@@ -117,7 +108,10 @@
     $('left-stack').style.opacity=leftDepth===0?'0':'1';
     $('right-stack').style.opacity=rightDepth===0?'0':'1';
     $('left-reading-edge').style.width=lx+'px';
-    drawLeftMarks(material);
+    edgeViews[0].update(leftDepth);edgeViews[1].update(rightDepth);
+    $('left-paper-edges').style.opacity=String(f.readingEdgeOpacity);
+    $('right-paper-edges').style.opacity=String(f.readingEdgeOpacity);
+    book.style.setProperty('--edge-hit-size',Math.max(12,36/Math.max(.18,scale))+'px');
     index.setReadingMaterial(material,joined);
     $('physical-index-host').style.setProperty('--reading-assembly',joined.toFixed(4));
     paintIndexGeometry(f);
@@ -130,6 +124,13 @@
   }
   function constrain(){
     const bounds=G.bounds(view,scale);
+    // The physical object extends beyond the printed 960 x 704 spread.
+    // Let readers bring the actual paper edge and both ribbon tails on screen.
+    if(960*scale>=view.w){
+      bounds.minX-=(2.5+(material?.rightDepth||0)*.55)*scale;
+      bounds.maxX+=(2.5+(material?.leftDepth||0)*.55)*scale;
+    }
+    if(704*scale>=view.h)bounds.minY-=Math.max(72,3+Math.max(material?.leftDepth||0,material?.rightDepth||0)*.85)*scale;
     x=clamp(x,bounds.minX,bounds.maxX);y=clamp(y,bounds.minY,bounds.maxY);
   }
   function transform(){
@@ -142,6 +143,7 @@
     Object.assign($('map-window').style,{left:vx*mw+'px',top:vy*mh+'px',width:ww*mw+'px',height:hh*mh+'px'});
     map.style.opacity=scale>fitScale*1.2?'1':'0';
     $('surface-caption').style.opacity=scale>fitScale*1.2?'0':'1';
+    ribbons?.update({scale});
     stage.dataset.scale=scale.toFixed(4);stage.dataset.x=x.toFixed(2);stage.dataset.y=y.toFixed(2);
     ['fit-book','focus-left','focus-right'].forEach((id,i)=>$(id).classList.toggle('active',focus===['fit','left','right'][i]));
   }
@@ -153,10 +155,11 @@
   function focusPage(side){
     if(mode!=='open')return;
     abortFold();
-    focus=side;scale=clamp((view.w-50)/480,fitScale,3.2);
+    const outer=(side==='left'?material?.leftDepth:material?.rightDepth)||0;
+    focus=side;scale=clamp((view.w-50)/(480+outer*.55),fitScale,3.2);
     // On a phone, reading view is intentionally closer than whole-page view.
     if(view.w<560)scale=Math.max(scale,fitScale*3.2);
-    x=22-(side==='left'?0:480)*scale;y=16;constrain();transform();save();
+    x=22+(side==='left'?outer*.55:-480)*scale;y=16;constrain();transform();save();
   }
   function zoom(next,at={x:view.w/2,y:view.h/2}){
     if(mode!=='open')return;
@@ -185,6 +188,15 @@
     if(startFold(direction,{x:480+direction*392,y:380},count,source))settleFold(true,true);
   }
   const index=window.PaperBookIndex.create({host:$('physical-index-host'),books:D.books,onSelect:i=>selectBook(i),onClose:()=>requestReading()});
+  const edgeViews=[window.PaperEdges.create($('left-paper-edges'),'left'),window.PaperEdges.create($('right-paper-edges'),'right')];
+  let bookmarkStorage;try{bookmarkStorage=window.localStorage;}catch{}
+  ribbons=window.PaperRibbons.create({host:$('ribbon-bookmarks'),panelHost:document.querySelector('.stage-wrap'),storage:bookmarkStorage,pageCount:D.pages.length,
+    getCurrent:()=>({spread,bookName:currentBook().name,ref:D.pages[spread+1].start||'',pose:capturePose()}),
+    onNavigate:(page,pose)=>selectBook(Math.max(0,D.pages[page+1]?.b??D.pages[page]?.b??0),page,pose)});
+  window.addEventListener('paper-ribbons-request',()=>{if(mode==='open'){cancelDemo();ribbons.open(0);}});
+  ['left-edge-open','right-edge-open'].forEach(id=>{
+    $(id).addEventListener('click',e=>{if(e.detail===0){e.preventDefault();requestDirectory();}});
+  });
   function capturePose(){return {zoom:scale/fitScale,cx:(view.w/2-x)/scale,cy:(view.h/2-y)/scale,focus};}
   function setSceneState(state){
     sceneState=state;stage.dataset.scene=state;
@@ -193,6 +205,8 @@
     if(window.PaperImmersion)window.PaperImmersion.setScene(reading?'reading':'directory');
     $('view-open').classList.toggle('selected',reading);$('view-edge').classList.toggle('selected',!reading);
     $('view-open').setAttribute('aria-pressed',String(reading));$('view-edge').setAttribute('aria-pressed',String(!reading));
+    ribbons?.setScene(reading,sceneProgress);
+    $('left-edge-open').inert=!reading;$('right-edge-open').inert=!reading;
     $('scene-controls').inert=reading;
     $('physical-index-host').inert=reading;
     $('scene-digital').disabled=!['edge','digital'].includes(state);
@@ -203,8 +217,12 @@
   function paintScene(){
     const pose=readPose||capturePose(),f=window.PaperBookScene.sample(sceneProgress,pose,view,fitScale,focusRect,focusAmount,material||Material.compute(spread,D.pages.length,D.books));
     book.style.transform=`translate3d(${f.x}px,${f.y}px,0) scale(${f.scale})`;
-    $('book-volume').style.transform=`rotateY(${-f.angle}deg) rotateZ(${-2*f.orbit}deg)`;
-    $('left-half').style.transform=`rotateY(${180*f.close}deg)`;
+    $('book-volume').style.transform='none';
+    $('left-half').style.transform=`rotateY(${f.leftAngle}deg)`;
+    $('right-half').style.transform=`rotateY(${f.rightAngle}deg)`;
+    document.querySelector('.gutter').style.opacity=String(1-f.close);
+    ribbons?.setScene(sceneState==='reading',f.close);
+    stage.dataset.leftAngle=f.leftAngle.toFixed(3);stage.dataset.rightAngle=f.rightAngle.toFixed(3);
     applyMaterial(Material.compute(spread,D.pages.length,D.books),f);
     index.setProgress(.3+.7*f.orbit);
     stage.dataset.sceneProgress=sceneProgress.toFixed(4);stage.dataset.digitalProgress=digitalProgress.toFixed(4);
@@ -260,7 +278,7 @@
     $('scene-digital').textContent=target?'收回纸质索引':'展开为数字目录';$('scene-digital').setAttribute('aria-pressed',String(!!target));
     setSceneState(target?'digital':'edge');
   }
-  async function selectBook(i,page=D.books[i].first){
+  async function selectBook(i,page=D.books[i].first,restorePose=null){
     if(!D.books[i])return;
     const token=navigationIntent();setSceneState('focusing');
     if(sceneProgress<1&&!await animateScene({p:1,f:0},Math.max(400,(1-sceneProgress)*1600),token))return;
@@ -269,9 +287,9 @@
     focusRect=index.focusBook(i);
     if(!await animateScene({f:1},560,token))return;
     if(!await animateScene({f:1},160,token))return;
-    // Pagination changes only behind the fully closed covers and the fore-edge.
+    // Change the opening position only when both halves meet at the closed fore-edge.
     spread=clamp(page&~1,0,D.pages.length-2);burstState=null;render();
-    readPose={zoom:1,cx:480,cy:352,focus:'fit'};
+    readPose=restorePose&&Number.isFinite(restorePose.zoom)&&Number.isFinite(restorePose.cx)&&Number.isFinite(restorePose.cy)?{...restorePose}:{zoom:1,cx:480,cy:352,focus:'fit'};
     $('scene-digital').textContent='展开为数字目录';$('scene-digital').setAttribute('aria-pressed','false');
     setSceneState('opening');
     if(!await animateScene({p:0,f:0},1650,token))return;
@@ -318,7 +336,8 @@
   function distance(){const a=[...pointers.values()];return a.length>1?Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y):0;}
   function begin(gCenter,n){
     const localX=(gCenter.x-x)/scale,localY=(gCenter.y-y)/scale;
-    return {start:gCenter,end:gCenter,fingers:n,side:localX>=0&&localX<=960&&localY>=0&&localY<=704?(localX<480?'left':'right'):'outside',baseX:x,baseY:y,baseScale:scale,baseDistance:distance(),pinched:false,slowLocked:false,cancelled:false,samples:[gCenter],vx:0,lifted:false};
+    const edge=localY>=0&&localY<=704&&(Math.abs(localX)<18/scale+(material?.leftDepth||0)*.55||Math.abs(localX-960)<18/scale+(material?.rightDepth||0)*.55);
+    return {edge,start:gCenter,end:gCenter,fingers:n,side:localX>=0&&localX<=960&&localY>=0&&localY<=704?(localX<480?'left':'right'):'outside',baseX:x,baseY:y,baseScale:scale,baseDistance:distance(),pinched:false,slowLocked:false,cancelled:false,samples:[gCenter],vx:0,lifted:false};
   }
   function pointerDown(e){
     if(mode!=='open'||(demoBusy&&!e.demo)||e.button>0)return;
@@ -334,7 +353,7 @@
     gesture=begin(centroid(),pointers.size);
     if(priorPinch)gesture.pinched=true;if(priorSlow&&pointers.size===1)gesture.slowLocked=true;
     stage.classList.add('dragging');
-    if(pointers.size===1&&gesture.side!=='outside'){
+    if(pointers.size===1&&gesture.side!=='outside'&&!gesture.edge){
       const g=gesture;
       holdTimer=setTimeout(()=>{
         if(gesture!==g||pointers.size!==1||g.cancelled||g.slowLocked)return;
@@ -393,6 +412,7 @@
     }else{
       const travel=Math.hypot(g.end.x-g.start.x,g.end.y-g.start.y);
       if(!g.cancelled&&!g.pinched&&g.fingers===1&&travel<9&&g.end.t-g.start.t<320){
+        if(g.edge){x=g.baseX;y=g.baseY;scale=g.baseScale;transform();lastTap=null;requestDirectory();stage.dataset.lastGesture='edge-tap';return;}
         if(lastTap&&g.end.t-lastTap.t<330&&Math.hypot(g.end.x-lastTap.x,g.end.y-lastTap.y)<30){
           if(scale>fitScale*1.3)fit();else zoom(fitScale*3.2,g.end);
           lastTap=null;
