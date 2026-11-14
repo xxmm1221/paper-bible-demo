@@ -5,7 +5,8 @@
   const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
   const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const Physics=window.PaperPhysics, Material=window.PaperBookMaterial;
-  let material=null,ribbons=null;
+  let material=null,ribbons=null,lastSceneFrame=null,edgeY=352,edgeDrag=null;
+  const K=window.PaperBookKinematics;
   let spread=0,scale=1,x=0,y=0,fitScale=1,mode='open',focus='fit',gesture=null;
   let burstState=null,feedbackTimer,demoBusy=false,lastTap=null;
   let fold=null,holdTimer=null,foldFrame=0,queuedTurns=[];
@@ -92,13 +93,13 @@
     ribbons?.update();
   }
   function paintIndexGeometry(f){
-    $('index-placement').style.left=f.indexLeft+'px';
-    $('physical-index-host').style.opacity=String(f.indexOpacity);
-    $('physical-index-host').style.transform=`translateZ(${f.indexZ}px) scaleX(${f.indexScale})`;
+    $('index-placement').style.left='0px';
+    $('physical-index-host').style.transform='none';
+    index.setPhysicalFrame({leftMatrix:K.foreedgeMatrixValues('left',material,f.close),rightMatrix:K.foreedgeMatrixValues('right',material,f.close),splitDepth:material.leftDepth,totalDepth:material.totalDepth});
   }
   function applyMaterial(next,sceneFrame){
     material=next||Material.compute(spread,D.pages.length,D.books);
-    const f=sceneFrame||window.PaperBookScene.sample(sceneProgress,readPose||capturePose(),view,fitScale,focusRect,focusAmount,material);
+    const f=sceneFrame||window.PaperBookScene.sample(sceneProgress,readPose||capturePose(),view,fitScale,focusRect,focusAmount,material,{digital:digitalProgress,edgeY});
     const joined=f.close,leftDepth=material.leftDepth,rightDepth=material.rightDepth;
     const lx=leftDepth*.55,rx=rightDepth*.55,ly=leftDepth*.85,ry=rightDepth*.85;
     $('left-stack').style.transform=`translate(${-lx}px,${ly}px)`;
@@ -108,9 +109,14 @@
     $('left-stack').style.opacity=leftDepth===0?'0':'1';
     $('right-stack').style.opacity=rightDepth===0?'0':'1';
     $('left-reading-edge').style.width=lx+'px';
-    edgeViews[0].update(leftDepth);edgeViews[1].update(rightDepth);
-    $('left-paper-edges').style.opacity=String(f.readingEdgeOpacity);
-    $('right-paper-edges').style.opacity=String(f.readingEdgeOpacity);
+    solid.update(material,f.close);
+    $('left-half').style.transform=K.topMatrix('left',material,f.close);
+    $('right-half').style.transform=K.topMatrix('right',material,f.close);
+    // Silk is sewn into the binding, not into whichever leaf happens to be
+    // open. Keep its attachment depth fixed while the closed split changes.
+    const ribbonMatrix=K.topMatrixValues('right',{totalDepth:material.totalDepth,leftDepth:material.totalDepth/2},f.close);
+    ribbonMatrix[12]-=480*ribbonMatrix[0];ribbonMatrix[13]-=480*ribbonMatrix[1];ribbonMatrix[14]-=480*ribbonMatrix[2];
+    $('ribbon-bookmarks').style.transform=K.matrixCSS(ribbonMatrix);
     book.style.setProperty('--edge-hit-size',Math.max(12,36/Math.max(.18,scale))+'px');
     index.setReadingMaterial(material,joined);
     $('physical-index-host').style.setProperty('--reading-assembly',joined.toFixed(4));
@@ -187,8 +193,13 @@
     if(fold){if(fold.source!=='manual'||fold.settling)queuedTurns.push([direction,count,source]);return;}
     if(startFold(direction,{x:480+direction*392,y:380},count,source))settleFold(true,true);
   }
-  const index=window.PaperBookIndex.create({host:$('physical-index-host'),books:D.books,onSelect:i=>selectBook(i),onClose:()=>requestReading()});
-  const edgeViews=[window.PaperEdges.create($('left-paper-edges'),'left'),window.PaperEdges.create($('right-paper-edges'),'right')];
+  const solid=window.PaperBookSolid.create($('paper-solid'));
+  const index=window.PaperBookIndex.create({host:$('physical-index-host'),books:D.books,onSelect:i=>selectBook(i),onClose:()=>requestReading(),onPan:panEdge});
+  function panEdge(delta){
+    if(sceneState!=='edge'||digitalProgress!==0||!lastSceneFrame)return;
+    edgeY=clamp(edgeY+delta/lastSceneFrame.edgePixelsPerUnit,0,704);paintScene();
+    edgeY=lastSceneFrame.edgeCenterY;
+  }
   let bookmarkStorage;try{bookmarkStorage=window.localStorage;}catch{}
   ribbons=window.PaperRibbons.create({host:$('ribbon-bookmarks'),panelHost:document.querySelector('.stage-wrap'),storage:bookmarkStorage,pageCount:D.pages.length,
     getCurrent:()=>({spread,bookName:currentBook().name,ref:D.pages[spread+1].start||'',pose:capturePose()}),
@@ -211,17 +222,20 @@
     $('physical-index-host').inert=reading;
     $('scene-digital').disabled=!['edge','digital'].includes(state);
     $('scene-chapters').disabled=!['edge','digital'].includes(state);
-    const labels={reading:'',closing:'合上书，沿着纸边找一找',edge:'沿着书侧，找回那一卷',digital:'同一组标签，展开来找',focusing:'找到切口，再打开这一卷',opening:'从这里，重新打开'};
+    const labels={reading:'',closing:'合上书，沿着纸边找一找',edge:'沿纸边上下拖动 · 从选中的纸层打开',digital:'同一组标签，展开来找',focusing:'找到切口，再打开这一卷',opening:'从这里，重新打开'};
     $('scene-status').textContent=labels[state]||'';
   }
   function paintScene(){
-    const pose=readPose||capturePose(),f=window.PaperBookScene.sample(sceneProgress,pose,view,fitScale,focusRect,focusAmount,material||Material.compute(spread,D.pages.length,D.books));
+    const pose=readPose||capturePose(),f=window.PaperBookScene.sample(sceneProgress,pose,view,fitScale,focusRect,focusAmount,material||Material.compute(spread,D.pages.length,D.books),{digital:digitalProgress,edgeY});
+    lastSceneFrame=f;
     book.style.transform=`translate3d(${f.x}px,${f.y}px,0) scale(${f.scale})`;
     $('book-volume').style.transform='none';
-    $('left-half').style.transform=`rotateY(${f.leftAngle}deg)`;
-    $('right-half').style.transform=`rotateY(${f.rightAngle}deg)`;
+
     document.querySelector('.gutter').style.opacity=String(1-f.close);
     ribbons?.setScene(sceneState==='reading',f.close);
+    // Keep the silk-tail fan and touch targets continuous with camera zoom,
+    // rather than resizing them on the final reading frame only.
+    ribbons?.update({scale:f.scale});
     stage.dataset.leftAngle=f.leftAngle.toFixed(3);stage.dataset.rightAngle=f.rightAngle.toFixed(3);
     applyMaterial(Material.compute(spread,D.pages.length,D.books),f);
     index.setProgress(.3+.7*f.orbit);
@@ -230,7 +244,7 @@
   function cancelDemo(){demoEpoch++;demoBusy=false;demoButtons(true);clearTimeout(tapTimer);lastTap=null;interrupt();$('touch-ring').style.display='none';}
   function navigationIntent(){
     const token=++navEpoch;if(navCancel){navCancel(false);navCancel=null;}cancelAnimationFrame(navFrame);
-    if(mode==='open')readPose=capturePose();cancelDemo();$('scene-chapter-list').hidden=true;
+    if(mode==='open'){readPose=capturePose();const at=index.focusBook(D.books.indexOf(currentBook()));if(at)edgeY=at.y;index.clearFocus();}cancelDemo();$('scene-chapter-list').hidden=true;
     return token;
   }
   function animateScene(target,duration,token){
@@ -324,6 +338,7 @@
     else if(e.key==='+'||e.key==='='){e.preventDefault();zoom(scale*1.2);}else if(e.key==='-'){e.preventDefault();zoom(scale/1.2);}else if(e.key==='0')fit();
   });
   stage.addEventListener('wheel',e=>{
+    if(sceneState==='edge'&&digitalProgress===0){e.preventDefault();panEdge(e.deltaY);return;}
     if(mode!=='open')return;
     e.preventDefault();if(demoBusy||fold)return;
     const r=stage.getBoundingClientRect();
@@ -340,6 +355,7 @@
     return {edge,start:gCenter,end:gCenter,fingers:n,side:localX>=0&&localX<=960&&localY>=0&&localY<=704?(localX<480?'left':'right'):'outside',baseX:x,baseY:y,baseScale:scale,baseDistance:distance(),pinched:false,slowLocked:false,cancelled:false,samples:[gCenter],vx:0,lifted:false};
   }
   function pointerDown(e){
+    if(sceneState==='edge'&&digitalProgress===0&&e.button===0){edgeDrag={id:e.pointerId,y:e.clientY};try{stage.setPointerCapture(e.pointerId);}catch{}return;}
     if(mode!=='open'||(demoBusy&&!e.demo)||e.button>0)return;
     if(fold&&(fold.settling||fold.source!=='manual'))return;
     clearHold();clearTimeout(tapTimer);
@@ -368,6 +384,7 @@
     }
   }
   function pointerMove(e){
+    if(edgeDrag?.id===e.pointerId){const dy=edgeDrag.y-e.clientY;edgeDrag.y=e.clientY;panEdge(dy);return;}
     if(!pointers.has(e.pointerId)||!gesture||gesture.cancelled||gesture.lifted)return;
     pointers.set(e.pointerId,relative(e));const c=centroid(),g=gesture;
     g.end=c;g.samples.push(c);while(g.samples.length>2&&c.t-g.samples[0].t>140)g.samples.shift();
@@ -424,6 +441,7 @@
     stage.dataset.lastGesture=result.type;stage.dataset.lastFingers=String(g.fingers);
   }
   function pointerUp(e,cancelled=false){
+    if(edgeDrag?.id===e.pointerId){edgeDrag=null;return;}
     if(!pointers.has(e.pointerId))return;
     clearHold();
     const g=gesture;
@@ -445,7 +463,7 @@
   stage.addEventListener('pointercancel',e=>pointerUp(e,true));
   stage.addEventListener('lostpointercapture',e=>{if(pointers.has(e.pointerId))pointerUp(e,true);});
   stage.addEventListener('contextmenu',e=>e.preventDefault());
-  function interrupt(){clearHold();pointers.clear();gesture=null;stage.classList.remove('dragging');abortFold();}
+  function interrupt(){edgeDrag=null;clearHold();pointers.clear();gesture=null;stage.classList.remove('dragging');abortFold();}
   window.addEventListener('blur',cancelDemo);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelDemo();});
 

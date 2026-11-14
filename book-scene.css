@@ -59,4 +59,12 @@ body[data-paper-scene='directory'] .viewport-map,body[data-paper-scene='director
 .edge-hit-right{right:0;transform:translateX(55%)}
 .paper-edge-hit:focus-visible{outline:1px solid #aa735b;outline-offset:2px;background:#bf935b12}
 body[data-paper-scene='directory'] .paper-edge-hit{pointer-events:none;visibility:hidden}
-.stage[data-scene='reading'] .physical-index-host{opacity:0!important}
+/* The same paper surfaces and labels now stay in the 3D book at every angle. */
+.left-half,.right-half{left:0;top:0;transform-origin:0 0;z-index:auto}
+.natural-paper-edge{display:none}
+.index-placement{left:0;top:0;width:960px;height:704px;transform-origin:0 0;transform-style:preserve-3d;z-index:auto}
+.physical-index-host{width:960px;height:704px;transform-origin:0 0;transform-style:preserve-3d;opacity:1}
+.physical-index-host .pbi-root{transform-style:preserve-3d}
+.stage[data-scene='edge']{touch-action:none}
+.paper-ribbons{transform-origin:0 0;z-index:auto}
+.paper-ribbons .pr-art,.paper-ribbons .pr-tip{opacity:1;transform:none}

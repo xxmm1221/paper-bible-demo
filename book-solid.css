@@ -1,0 +1,7 @@
+/* The solid occupies the shared book world, not either hinged paper half. */
+.book-solid{position:absolute;left:0;top:0;width:960px;height:704px;transform-style:preserve-3d;pointer-events:none;overflow:visible}
+.bs-face{position:absolute;left:0;top:0;transform-origin:0 0;backface-visibility:visible;-webkit-backface-visibility:visible;pointer-events:none;background-repeat:no-repeat;background-size:100% 100%;border:0;box-shadow:none;opacity:1}
+.bs-face[hidden]{display:none!important}
+.bs-foreedge{background-color:#efeadd}
+.bs-paper-triangle{width:100px;height:100px;clip-path:polygon(0 0,100% 0,0 100%);background-color:#efeadd}
+.bs-leather-edge{background:linear-gradient(90deg,#713b45,#87505a 35%,#5b2a37);border:0}
