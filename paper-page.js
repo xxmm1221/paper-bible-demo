@@ -25,8 +25,13 @@
   }
   function svg(page,index,books){
     const name=page.b<0?'旧约全书':books[page.b].name;
+    // Keep parchment in the same SVG paint layer as its ink. A transparent
+    // SVG over a separately composited CSS background can expose the table
+    // for a frame when the curved texture hands back to the static page.
+    const stops=index%2?[[0,'#dcd5bf'],[.09,'#fffdf1'],[.9,'#fffef5'],[1,'#f9f6eb']]:[[0,'#f9f6eb'],[.1,'#fffef5'],[.91,'#fffdf1'],[1,'#dcd5bf']];
+    const paper=`<defs><linearGradient id="paper-${index}">${stops.map(([offset,color])=>`<stop offset="${offset}" stop-color="${color}"/>`).join('')}</linearGradient></defs><rect width="480" height="704" fill="url(#paper-${index})"/>`;
     const glyphs=commands(page,index,books).map(c=>`<text data-role="${esc(c.role)}" x="${c.x.toFixed(3)}" y="${c.y.toFixed(3)}" font-size="${c.size}" font-family="${esc(c.family)}" font-weight="${esc(c.weight)}" text-anchor="${c.anchor}" fill="${c.color}" style="fill:${c.color}"${c.spacing?` letter-spacing="${c.spacing}"`:''}>${esc(c.text)}</text>`).join('');
-    return `<svg viewBox="0 0 480 704" role="img" aria-label="${esc(name)}，体验版第 ${index} 页，${esc(page.start)} 至 ${esc(page.end)}">${glyphs}${page.b===-1?'<path d="M180 338 H300" stroke="#b2a78c" stroke-width=".6"/>':''}</svg>`;
+    return `<svg viewBox="0 0 480 704" role="img" aria-label="${esc(name)}，体验版第 ${index} 页，${esc(page.start)} 至 ${esc(page.end)}">${paper}${glyphs}${page.b===-1?'<path d="M180 338 H300" stroke="#b2a78c" stroke-width=".6"/>':''}</svg>`;
   }
   function paint(canvas,page,index,books,ratio=2){
     const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);

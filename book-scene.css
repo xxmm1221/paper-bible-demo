@@ -68,3 +68,32 @@ body[data-paper-scene='directory'] .paper-edge-hit{pointer-events:none;visibilit
 .stage[data-scene='edge']{touch-action:none}
 .paper-ribbons{transform-origin:0 0;z-index:auto}
 .paper-ribbons .pr-art,.paper-ribbons .pr-tip{opacity:1;transform:none}
+
+/* Flat SVG stays the authoritative accessible text; only its painted face is
+   suppressed while the same page is drawn on flexible strips. */
+.book.has-curved-leaves .paper{opacity:0;pointer-events:none}
+.book .paper{background:transparent;box-shadow:none}
+/* Keep flat ink out of the curved solid's compositor plane. The inverse
+   perspective scale preserves every screen coordinate, not a visual zoom. */
+.book:not(.has-curved-leaves) .paper{backface-visibility:visible;-webkit-backface-visibility:visible;transform:translateZ(300px) scale(.833333333333)}
+.book:not(.has-curved-leaves) .left-paper{transform-origin:480px 352px}
+.book:not(.has-curved-leaves) .right-paper{transform-origin:0 352px}
+body[data-paper-scene='reading'] .paper-ribbons{transform-origin:480px 352px!important;transform:translateZ(320px) scale(.822222222222)!important}
+.stage[data-scene='fan'],.stage[data-scene='fanning'],.stage[data-scene='fan-turn']{touch-action:none}
+.stage[data-scene='fan'] .book,.stage[data-scene='fan'] .book-volume{touch-action:none}
+.stage[data-scene='fan-turn'] .scene-bottom{opacity:0;pointer-events:none}
+
+/* Contain book depth within the stage so screen-space controls stay above it. */
+.stage{z-index:0;isolation:isolate}
+
+/* Raise the already-projected curl raster above curved under-pages without moving its screen pixels. */
+.paper-curl-canvas{transform-origin:540px 592px;transform:translateZ(600px) scale(.666666666667)}
+.paper-curl-shadow{transform-origin:540px 592px;transform:translateZ(599px) scale(.667222222222)}
+/* Remove the obsolete outer perspective; the book owns its calibrated lens. */
+.stage-wrap{perspective:none}
+.scene-controls{transform:translateZ(0);z-index:100}
+
+/* Screen controls are deliberately outside every book-perspective ancestor. */
+.scene-controls{position:fixed;z-index:120;inset:0}
+
+.stage-wrap{background:#e2dacd}

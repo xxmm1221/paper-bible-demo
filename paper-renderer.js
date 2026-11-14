@@ -1,6 +1,49 @@
 (function(root){
   'use strict';
   const P=root.PaperPhysics,W=1080,H=990,LEFT=60,TOP=240;
+  const originWeight=progress=>{const t=Math.max(0,Math.min(1,(Number(progress)||0)/.52));return 1-t*t*(3-2*t);};
+  function projectBoundPoint(point){
+    const perspective=1800,ratio=perspective/(perspective-point.z);
+    return {x:480+(point.x-480)*ratio,y:352+(point.y-352)*ratio,z:point.z};
+  }
+  function originProfile(surface,cols,rows){
+    const K=root.PaperBookKinematics;if(!surface||!K)return null;
+    const side=surface.side==='left'?'left':'right',direction=side==='left'?-1:1;
+    const material=surface.material||{},state=surface.state||{},depth=K.frame(material,0).leftDepth;
+    const vertices=[];
+    for(let j=0;j<=rows;j++)for(let i=0;i<=cols;i++){
+      const row=j/rows*704,u=i/cols,inset=K.edgeInset(side,depth,row,material,state);
+      const s=Math.min(u*480,480-inset),flatX=480+direction*s;
+      const point=K.pagePoint(side,depth,s/480,row,material,surface.close||0,state),projected=projectBoundPoint(point);
+      vertices.push({s,cut:s<u*480-1e-8,dx:projected.x-flatX,
+        dy:projected.y-row+point.z*P.SLOPE,dz:point.z});
+    }
+    return {vertices,cols,rows,direction};
+  }
+  function applyOriginSurface(shape,options,direction,profile){
+    if(!options.originSurface)return shape;
+    const origin=profile||originProfile(options.originSurface,shape.cols,shape.rows);if(!origin)return shape;
+    const a=shape.vertices,weight=originWeight(options.progress),stride=shape.cols+1;
+    for(let i=0;i<origin.vertices.length;i++){
+      const at=i*8,entry=origin.vertices[i];
+      // Only the unprinted outer margin is cut away. Body glyph UVs and all
+      // ordinary (non-index) curls are unchanged.
+      if(entry.cut){const point=P.point({...options,direction},entry.s,a[at+4]*704);a[at]=point.x;a[at+1]=point.y;a[at+2]=point.z;}
+      a[at]+=entry.dx*weight;a[at+1]+=entry.dy*weight;a[at+2]+=entry.dz*weight;
+    }
+    // Recompute normals from the deformed ruled surface for both WebGL and
+    // Canvas shading. Direction keeps the front side consistent on the left.
+    let maxZ=0;
+    for(let j=0;j<=shape.rows;j++)for(let i=0;i<=shape.cols;i++){
+      const k=(j*stride+i)*8,l=(j*stride+Math.max(0,i-1))*8,r=(j*stride+Math.min(shape.cols,i+1))*8;
+      const t=(Math.max(0,j-1)*stride+i)*8,b=(Math.min(shape.rows,j+1)*stride+i)*8;
+      const ux=a[r]-a[l],uy=a[r+1]-a[l+1],uz=a[r+2]-a[l+2];
+      const vx=a[b]-a[t],vy=a[b+1]-a[t+1],vz=a[b+2]-a[t+2];
+      const nx=(uy*vz-uz*vy)*direction,ny=(uz*vx-ux*vz)*direction,nz=(ux*vy-uy*vx)*direction;
+      const len=Math.hypot(nx,ny,nz)||1;a[k+5]=nx/len;a[k+6]=ny/len;a[k+7]=nz/len;maxZ=Math.max(maxZ,a[k+2]);
+    }
+    shape.maxZ=maxZ;return shape;
+  }
   const VS=`attribute vec3 a_position;attribute vec2 a_uv;attribute vec3 a_normal;
     uniform float u_layer;varying vec2 v_uv;varying vec3 v_normal;
     void main(){vec3 p=a_position;p.z+=u_layer; p.y+=u_layer*.22;
@@ -63,6 +106,7 @@
       return c;
     }
     prepare(front,back,direction,count=1){
+      this.originSurface=null;this.originProfile=null;
       this.pageIndices=[front,back];this.direction=direction;this.count=count;this.images=[this.page(front),this.page(back)];
       const gl=this.gl;
       if(gl){gl.useProgram(this.program);this.images.forEach((image,i)=>{
@@ -76,6 +120,10 @@
     draw(options){
       this.lastOptions={...options};
       const shape=P.mesh({...options,direction:this.direction},this.cols,this.rows);this.lastShape=shape;
+      if(options.originSurface){
+        if(this.originSurface!==options.originSurface){this.originSurface=options.originSurface;this.originProfile=originProfile(options.originSurface,this.cols,this.rows);}
+        applyOriginSurface(shape,options,this.direction,this.originProfile);
+      }
       this.drawShadow(shape,options.progress);
       if(this.gl){
         const gl=this.gl;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -124,5 +172,9 @@
     }
     hide(){this.canvas.hidden=true;this.shadow.hidden=true;delete this.host.dataset.curlProgress;delete this.host.dataset.curlHeight;}
   }
+  Renderer.projectBoundPoint=projectBoundPoint;
+  Renderer.originWeight=originWeight;
+  Renderer.originProfile=originProfile;
+  Renderer.applyOriginSurface=applyOriginSurface;
   root.PaperSheetRenderer=Renderer;
 })(window);

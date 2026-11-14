@@ -27,7 +27,7 @@ function fixture(startSpread=2,options={}){
   const el=id=>{if(!elements.has(id))elements.set(id,new Element(id));return elements.get(id);};
   const doc={getElementById:el,querySelector:s=>el(s),querySelectorAll:()=>[],createElement:tag=>new Element(tag),addEventListener:(name,fn)=>listen(events,'document:'+name,fn),dispatchEvent:e=>events['document:'+e.type]?.(e),hidden:false};
   doc.body=el('body');doc.documentElement=el('html');
-  const index={setPhysicalFrame:value=>indexCalls.push({type:'geometry',value,at:now}),setReadingMaterial:(material,assembly)=>indexCalls.push({type:'material',value:material,assembly,at:now,scene:el('stage').dataset.scene,progress:Number(el('stage').dataset.sceneProgress)}),setProgress:p=>indexCalls.push({type:'progress',value:p,at:now}),setDigital:d=>indexCalls.push({type:'digital',value:d,at:now}),focusBook:i=>{indexCalls.push({type:'focus',value:i,at:now});return {x:200,y:300,width:47,height:17,index:i,...options.focusRects?.[i]};},clearFocus:()=>indexCalls.push({type:'clear',at:now}),resize:()=>indexCalls.push({type:'resize',at:now}),destroy(){}};
+  const index={getNotches:()=>[],setInteractionSide:side=>indexCalls.push({type:'interaction',side,at:now}),setSurfaceFrame:frame=>{const K=context.PaperBookKinematics,m=frame.material;indexCalls.push({type:'material',value:m,assembly:frame.close,at:now,scene:el('stage').dataset.scene,progress:Number(el('stage').dataset.sceneProgress)});indexCalls.push({type:'geometry',at:now,value:{leftMatrix:K.foreedgeMatrixValues('left',m,frame.close),rightMatrix:K.foreedgeMatrixValues('right',m,frame.close),splitDepth:m.leftDepth,totalDepth:m.totalDepth}});},setPhysicalFrame:value=>indexCalls.push({type:'geometry',value,at:now}),setReadingMaterial:(material,assembly)=>indexCalls.push({type:'material',value:material,assembly,at:now,scene:el('stage').dataset.scene,progress:Number(el('stage').dataset.sceneProgress)}),setProgress:p=>indexCalls.push({type:'progress',value:p,at:now}),setDigital:d=>indexCalls.push({type:'digital',value:d,at:now}),focusBook:i=>{indexCalls.push({type:'focus',value:i,at:now});return {x:200,y:300,width:47,height:17,index:i,...options.focusRects?.[i]};},clearFocus:()=>indexCalls.push({type:'clear',at:now}),resize:()=>indexCalls.push({type:'resize',at:now}),destroy(){}};
   const rendered=[];
   class Renderer{
     constructor(){this.last=null;}
@@ -36,7 +36,7 @@ function fixture(startSpread=2,options={}){
     hide(){delete el('book').dataset.curlProgress;}
   }
   const context={console,document:doc,PaperPhysics:Physics,PaperGestures:Gestures,PaperBookMaterial:Material,PaperSheetRenderer:Renderer,
-    PaperBookSolid:{create:()=>({update(){}})},PaperRibbons:{create:args=>{ribbonOptions=args;return {update(){},setScene:(reading,close)=>ribbonCalls.push({reading,close}),open:slot=>ribbonCalls.push({open:slot})};}},PaperBookIndex:{create:args=>{indexOptions=args;return index;}},PaperImmersion:{setScene(){},showChrome(){},hideChrome(){}},
+    PaperBookLeaves:{stripClip:()=>'none',create:()=>({setPages(){},update:(m,close,state)=>({active:close>0||state.fanLeft>0||state.fanRight>0})})},PaperBookSolid:{create:()=>({update(){}})},PaperRibbons:{create:args=>{ribbonOptions=args;return {update(){},setScene:(reading,close)=>ribbonCalls.push({reading,close}),open:slot=>ribbonCalls.push({open:slot})};}},PaperBookIndex:{create:args=>{indexOptions=args;return index;}},PaperImmersion:{setScene(){},showChrome(){},hideChrome(){}},
     performance:{now:()=>now},navigator:{},matchMedia:()=>({matches:!!options.reducedMotion,addEventListener(){},removeEventListener(){}}),
     CustomEvent:class{constructor(type,init={}){this.type=type;this.detail=init.detail;}},Event:class{constructor(type){this.type=type;}},
     localStorage:{getItem:()=>JSON.stringify({spread:startSpread}),setItem:(key,value)=>saved.push({at:now,scene:el('stage').dataset.scene,key,value:JSON.parse(value)})},
@@ -306,11 +306,11 @@ test('zoom and resize do not alter material quantity or resurrect the full right
   f.el('stage').clientWidth=390;f.el('stage').clientHeight=844;f.resize();
   const after=materialState(f);for(const key of Object.keys(before))closeTo(after[key],before[key],`viewport changed ${key}`);
 });
-test('a short tap on either paper edge closes the book without turning a page',async()=>{
+test('a short tap fans only the chosen paper edge without closing or turning a page',async()=>{
   for(const side of ['left','right']){
     const f=fixture(920),stage=f.el('stage'),p=f.at(),px=Number(stage.dataset.x)+(side==='left'?0:960)*p.scale;
     f.emit('pointerdown',px,p.y);f.advance(90);f.emit('pointerup',px,p.y);
-    assert.equal(stage.dataset.lastGesture,'edge-tap');await f.untilScene('edge');
+    assert.equal(stage.dataset.lastGesture,'edge-tap');await f.untilScene('fan');assert.equal(stage.dataset.fanSide,side);closeTo(Number(stage.dataset.sceneProgress),0,'fan must not close book');closeTo(Number(stage.dataset.fanAmount),1,'fan endpoint');
     assert.equal(stage.dataset.spread,'920');assert.equal(f.rendered.length,0);
   }
 });
@@ -319,7 +319,7 @@ test('dragging from an edge pans rather than accidentally opening the index',asy
   f.emit('pointerdown',px,p.y);f.advance(400);f.emit('pointermove',px-24,p.y+35);f.advance(300);f.emit('pointerup',px-30,p.y+42);
   await f.advanceAsync(500);assert.equal(stage.dataset.scene,'reading');assert.equal(stage.dataset.spread,'920');assert.equal(f.rendered.length,0);
 });
-test('keyboard edge entry and both halves close symmetrically without a cover orbit',async()=>{
+test('keyboard edge entry splays the chosen side without rotating rigid halves',async()=>{
   const f=fixture(920),stage=f.el('stage');f.el('left-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});
   for(let n=0;n<120;n++){
     await f.advanceAsync(16);
@@ -327,7 +327,7 @@ test('keyboard edge entry and both halves close symmetrically without a cover or
     assert.ok(left>=0&&left<=90);closeTo(left,-right,'symmetrical hinges');assert.equal(f.el('book-volume').style.transform,'none');
     closeTo(Number(f.el('left-stack').dataset.paperDepth),Material.compute(920,1254).leftDepth,'left material stays left during closure');
   }
-  await f.untilScene('edge');closeTo(Number(stage.dataset.leftAngle),90,'left endpoint');closeTo(Number(stage.dataset.rightAngle),-90,'right endpoint');
+  await f.untilScene('fan');closeTo(Number(stage.dataset.leftAngle),0,'left remains open');closeTo(Number(stage.dataset.rightAngle),0,'right remains open');assert.equal(stage.dataset.fanSide,'left');
 });
 test('ribbon return uses closed-edge navigation and restores the bookmarked reading window',async()=>{
   const f=fixture(1174),stage=f.el('stage'),target=920,pose={zoom:2,cx:440,cy:380,focus:'custom'};
@@ -396,6 +396,54 @@ test('physical-side pan moves only the camera and never changes paper split or r
   stage.handlers.wheel({deltaY:120,preventDefault(){}});assert.notEqual(f.el('book').style.transform,before);
   closeTo(f.indexCalls.filter(c=>c.type==='geometry').at(-1).value.splitDepth,split,'panning moved paper');
   assert.equal(stage.dataset.spread,'920');assert.equal(f.saved.length,saved);
+});
+test('fanned physical cut selection turns the chosen packet directly, never through a closed directory',async()=>{
+  for(const [start,side,i] of [[0,'right',18],[1232,'left',11]]){
+    const f=fixture(start),stage=f.el('stage');f.el(side+'-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});await f.untilScene('fan');
+    const before=f.sceneWrites.length,target=f.context.BIBLE_DATA.books[i].first&~1;f.selectBook(i);
+    await f.untilScene('fan-turn');assert.equal(stage.dataset.spread,String(start));
+    assert.equal(f.rendered.at(-1).count,Math.abs(target-start)/2);
+    await f.advanceAsync(450);assert.ok(Number(stage.dataset.fanAmount)>0&&Number(stage.dataset.fanAmount)<1);
+    assert.equal(stage.dataset.spread,String(start),'preview must not commit destination early');
+    await f.untilScene('reading');assert.equal(stage.dataset.spread,String(target));
+    assert.ok(f.sceneWrites.slice(before).filter(w=>w.key==='sceneProgress').every(w=>Number(w.value)===0),'cut selection closed book');
+    assert.equal(f.el('book').classList.contains('has-curved-leaves'),false);
+  }
+});
+test('returning during a direct cut turn rolls back the target and restores the reading pose',async()=>{
+  const f=fixture(100),stage=f.el('stage');f.el('focus-right').onclick();const before=['scale','x','y'].map(k=>stage.dataset[k]);
+  f.el('right-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});await f.untilScene('fan');
+  f.selectBook(18);await f.advanceAsync(550);const beforeReturn=Number(stage.dataset.fanAmount);f.el('scene-back').onclick();closeTo(Number(stage.dataset.fanAmount),beforeReturn,'return cannot jump to full fan');await f.advanceAsync(180);assert.ok(Number(stage.dataset.fanAmount)<1,'return jumped instead of reversing the held packet');await f.untilScene('reading');await f.advanceAsync(2000);
+  assert.equal(stage.dataset.spread,'100');assert.deepEqual(['scale','x','y'].map(k=>stage.dataset[k]),before);
+});
+test('fan vertical browsing only moves camera and blank tap puts the same paper back',async()=>{
+  const f=fixture(570,{width:390,height:844}),stage=f.el('stage');f.el('right-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});await f.untilScene('fan');
+  const before=f.el('book').style.transform,count=f.saved.length;stage.handlers.wheel({deltaY:120,preventDefault(){}});
+  assert.notEqual(f.el('book').style.transform,before);assert.equal(stage.dataset.spread,'570');assert.equal(f.saved.length,count);
+  f.emit('pointerdown',20,300);f.advance(60);f.emit('pointerup',20,300);await f.untilScene('reading');assert.equal(stage.dataset.spread,'570');
+});
+test('fan digital fallback retains the same book and retracts before opening a different cut',async()=>{
+  const f=fixture(570),stage=f.el('stage');f.el('left-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});await f.untilScene('fan');
+  f.el('scene-digital').onclick();await f.untilScene('digital');closeTo(Number(stage.dataset.fanAmount),0,'fan retracted into closed book');
+  f.selectBook(64);await f.untilScene('reading');assert.equal(stage.dataset.spread,'1232');
+});
+test('an empty first-page left side cannot fabricate a fan or extra paper',async()=>{
+  const f=fixture(0);f.el('left-edge-open').dispatchEvent({type:'click',detail:0,preventDefault(){}});await f.advanceAsync(1500);
+  assert.equal(f.el('stage').dataset.scene,'reading');assert.equal(f.el('stage').dataset.leftSheets,'0.0000');
+});
+test('flat ink compositor isolation preserves screen pixels and leaves curl above ribbons',async()=>{
+  for(const [z,s] of [[300,.833333333333],[320,.822222222222],[600,.666666666667]]){
+    for(const x of [0,120,480,720,960])for(const y of [0,352,704]){
+      assert.ok(Math.abs(480+(x-480)*s*1800/(1800-z)-x)<1e-6);
+      assert.ok(Math.abs(352+(y-352)*s*1800/(1800-z)-y)<1e-6);
+    }
+  }
+  const css=fs.readFileSync('book-scene.css','utf8');
+  assert.match(css,/\.book\.has-curved-leaves \.paper\{opacity:0/);
+  assert.match(css,/\.paper-ribbons\{transform-origin:480px 352px!important;transform:translateZ\(320px\)/);
+  const f=fixture(1174);f.el('view-edge').onclick();await f.untilScene('edge');f.el('scene-back').onclick();await f.untilScene('reading');
+  assert.equal(f.el('left-half').style.transform,'none');assert.equal(f.el('right-half').style.transform,'translateX(480px)');
+  assert.equal(f.el('stage').dataset.spread,'1174');
 });
 (async()=>{
   for(const {name,fn} of scenarios){

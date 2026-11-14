@@ -2,6 +2,12 @@
 .book-solid{position:absolute;left:0;top:0;width:960px;height:704px;transform-style:preserve-3d;pointer-events:none;overflow:visible}
 .bs-face{position:absolute;left:0;top:0;transform-origin:0 0;backface-visibility:visible;-webkit-backface-visibility:visible;pointer-events:none;background-repeat:no-repeat;background-size:100% 100%;border:0;box-shadow:none;opacity:1}
 .bs-face[hidden]{display:none!important}
-.bs-foreedge{background-color:#efeadd}
-.bs-paper-triangle{width:100px;height:100px;clip-path:polygon(0 0,100% 0,0 100%);background-color:#efeadd}
+.bs-foreedge{background-color:#f4f0e6}
+.bs-paper-triangle{width:100px;height:100px;clip-path:polygon(-.3% -.3%,100.6% -.3%,-.3% 100.6%);background-color:#f4f0e6}
 .bs-leather-edge{background:linear-gradient(90deg,#713b45,#87505a 35%,#5b2a37);border:0}
+
+.bs-paper-quad{width:100px;height:100px;background-color:#f4f0e6;clip-path:inset(-.15%)}
+
+/* One back-plane raster replaces hundreds of composited 3D paper faces. */
+.bs-raster{position:absolute;pointer-events:none;backface-visibility:visible;-webkit-backface-visibility:visible}
+.bs-raster[hidden]{display:none!important}

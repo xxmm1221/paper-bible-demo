@@ -1,0 +1,4 @@
+/* Nothing above the ruled strips flattens the book's shared 3D world. */
+.book-leaves{position:absolute;left:0;top:0;width:960px;height:704px;transform-style:preserve-3d;pointer-events:none;overflow:visible}
+.book-leaves[hidden]{display:none!important}
+.bl-strip{position:absolute;left:0;top:0;transform-origin:0 0;backface-visibility:hidden;-webkit-backface-visibility:hidden;pointer-events:none;background-repeat:no-repeat;border:0;box-shadow:none}

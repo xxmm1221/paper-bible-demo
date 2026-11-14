@@ -51,7 +51,7 @@ test('deep digital scroll retracts continuously and preserves exact original nod
  assert.equal(f.index.setDigital(.5).scrollTop,410);assert.equal(f.index.setDigital(.8).scrollTop,656);assert.equal(f.index.setDigital(1).scrollTop,820);f.index.setDigital(.3);assert.equal(f.scroll.scrollTop,246);f.index.setDigital(0);assert.equal(f.scroll.scrollTop,0);f.index.setDigital(1);assert.equal(f.scroll.scrollTop,0);
 });
 test('focus reports the true selected sheet depth and a stable closed world position',()=>{
- const f=fixture(),a=f.index.focusBook(65);f.index.setDigital(1);const b=f.index.focusBook(65);assert.deepEqual(a,b);near(a.depth,Math.floor(books[65].first/2)/627*36,'exact focus depth');near(a.x,480+a.depth-18,'closed world x');assert.equal(a.width,18);assert.equal(a.height,9);assert.equal(f.buttons[65].attrs['aria-current'],'true');f.index.clearFocus();assert.equal(f.buttons[65].attrs['aria-current'],undefined);assert.equal(f.index.focusBook(-1),null);
+ const f=fixture(),a=f.index.focusBook(65);f.index.setDigital(1);const b=f.index.focusBook(65);assert.deepEqual(a,b);near(a.depth,Math.floor(books[65].first/2)/627*36,'exact focus depth');near(a.x,480+a.depth-18,'closed world x');assert.equal(a.width,18);assert.equal(a.height,8);assert.equal(f.buttons[65].attrs['aria-current'],'true');f.index.clearFocus();assert.equal(f.buttons[65].attrs['aria-current'],undefined);assert.equal(f.index.focusBook(-1),null);
 });
 test('reading ownership uses both physical halves without opacity replacement',()=>{
  const f=fixture(),m=material(1232);f.index.setReadingMaterial(m,0);f.index.setPhysicalFrame(frame(m,0));
@@ -78,7 +78,66 @@ test('physical wheel/drag pans the real edge while moved pointers cannot acciden
  f.root.handlers.wheel({deltaY:60,stopPropagation(){},preventDefault(){}});assert.deepEqual(f.pans,[60]);f.root.handlers.pointerdown(e('down',100));f.root.handlers.pointermove(e('move',120));f.root.handlers.pointerup(e('up',120));assert.deepEqual(f.pans,[60,-20]);let r=f.buttons[3].getBoundingClientRect();const click=f.clickAt(f.buttons[3],r.left+r.width/2,r.top+r.height/2);assert.ok(click.immediateStopped);assert.equal(f.selections.length,0);
  f.index.setDigital(1);f.root.handlers.wheel({deltaY:80,stopPropagation(){},preventDefault(){throw Error('digital scroll must stay native');}});assert.equal(f.pans.length,2);
 });
+test('22 thumb recesses retain fixed absolute paper-depth and three inset label rows',()=>{
+ const f=fixture(),model=Index.geometry(books,pageCount),notches=f.index.getNotches();assert.equal(notches.length,22);
+ model.groups.forEach((group,g)=>{const cut=notches[g];assert.equal(cut.y,34+g*30);assert.equal(cut.radius,13);assert.ok(cut.span>=4.5);
+  group.indices.forEach(i=>{const slot=model.slots[i];assert.ok(Math.abs(slot.anchorDepth-cut.depth)<cut.span);assert.ok(Math.abs(slot.physical.y+slot.physical.height/2-cut.y)<=8);});
+ });
+ notches[0].depth=900;assert.notEqual(f.index.getNotches()[0].depth,900);assert.equal(f.nodes.filter(n=>n.className==='pbi-recess-shadow').length,22);
+});
+test('curved ink stays at its own recessed material point with unit axes and natural glyph size',()=>{
+ const f=fixture(),model=Index.geometry(books,pageCount),m=material(620),state={fanLeft:.35,fanRight:1,notches:f.index.getNotches()};
+ for(const close of [0,.18,.5,.85,1]){f.index.setSurfaceFrame({material:m,close,...state});f.buttons.forEach((b,i)=>{
+  const slot=model.slots[i],side=slot.anchorDepth<m.leftDepth?'left':'right',matrix=parse(b.style.transform),center=point(matrix,9,4),p=K.foreedgePoint(side,slot.anchorDepth,slot.physical.y+4,m,close,state);
+  assert.ok(matrix[0]>0,'ink must never mirror backwards on a curved notch lip');near(Math.hypot(matrix[0],matrix[1],matrix[2]),1,'unit width');near(Math.hypot(matrix[4],matrix[5],matrix[6]),1,'unit height');
+  const expectedLift=.18+2.1*(side==='left'?state.fanLeft:state.fanRight)*(1-close)*(1-close);near(Math.hypot(center.x-p.x,center.y-p.y,center.z-p.z),expectedLift,'ink surface lift',1e-5);
+  assert.equal(b.dataset.paperSide,side);assert.equal(b.style.opacity,'1');b.children.forEach(part=>assert.equal(part.children[0].style.fontSize,'5.9px'));
+ });}
+});
+test('closed recessed index cannot jump when the selected opening layer changes',()=>{
+ const f=fixture();let reference;
+ for(const spread of [0,570,1232,398,0]){f.index.setSurfaceFrame({material:material(spread),close:1,fanLeft:1,fanRight:1});const matrices=f.buttons.map(b=>parse(b.style.transform));
+  if(reference)matrices.forEach((m,i)=>m.forEach((v,k)=>near(v,reference[i][k],'recessed closed matrix')));else reference=matrices;
+ }
+});
+test('only the fanned side accepts physical clicks while digital retains all 66 books',()=>{
+ const f=fixture(),m=material(1232);f.index.setSurfaceFrame({material:m,close:0,fanRight:1});f.index.setInteractionSide('right');
+ f.buttons.forEach((b,i)=>{assert.equal(b.disabled,i<64);assert.equal(b.tabIndex,i<64?-1:0);b.handlers.click({detail:0,stopPropagation(){}});});assert.deepEqual(f.selections,[64,65]);
+ f.index.setInteractionSide(null);f.buttons[64].handlers.click({detail:0,stopPropagation(){}});assert.deepEqual(f.selections,[64,65]);
+ f.index.setDigital(1);assert.ok(f.buttons.every(b=>!b.disabled));f.buttons[0].handlers.click({detail:0,stopPropagation(){}});assert.deepEqual(f.selections,[64,65,0]);
+ f.index.setDigital(0);assert.ok(f.buttons.every(b=>b.disabled));f.index.setInteractionSide('left');assert.equal(f.buttons[0].disabled,false);assert.equal(f.buttons[65].disabled,true);
+});
+test('recessed fan and digital round trips retain all original ink nodes and finite invertible geometry',()=>{
+ const f=fixture(),nodes=f.nodes.length,m=material(570),buttons=f.buttons.slice();
+ for(let step=0;step<=40;step++){f.index.setSurfaceFrame({material:m,close:Math.sin(step/40*Math.PI),fanLeft:step/40,fanRight:1-step/40});f.index.setDigital(step/40);f.buttons.forEach(b=>{const a=parse(b.style.transform);a.forEach(v=>assert.ok(Number.isFinite(v)));Index.inverse(a);});}
+ f.index.setDigital(0);assert.equal(f.nodes.length,nodes);f.buttons.forEach((b,i)=>assert.equal(b,buttons[i]));
+});
+test('camera-only pan does not recompute unchanged recessed ink geometry',()=>{
+ const f=fixture(),m=material(1232);f.index.setSurfaceFrame({material:m,close:0,fanLeft:1,fanRight:0});let paints=0;
+ const original=f.root.style.setProperty;f.root.style.setProperty=function(...args){paints++;return original.apply(this,args);};
+ for(let i=0;i<30;i++)f.index.setSurfaceFrame({material:{...m},close:0,fanLeft:1,fanRight:0});assert.equal(paints,0);
+ f.index.setSurfaceFrame({material:m,close:0,fanLeft:.9,fanRight:0});assert.ok(paints>0);
+});
+test('closed ink is six persistent natural-glyph strips, with no triangles cutting through its text',()=>{
+ const f=fixture(),initialNodes=f.nodes.length,model=Index.geometry(books,pageCount);
+ assert.equal(f.nodes.filter(n=>n.className==='pbi-ink-strip').length,66*6);
+ for(const spread of [0,570,1232]){
+  const m=material(spread),state={fanLeft:0,fanRight:0,notches:f.index.getNotches()},sample=Index.facetSampler(m,1,state);
+  f.index.setSurfaceFrame({material:m,close:1});
+  for(const slot of model.slots){
+   const side=slot.anchorDepth<m.leftDepth?'left':'right',y=slot.physical.y+4;
+   for(let j=0;j<Index.INK_STRIPS;j++){
+    const start=j*3-9,matrix=Index.inkStripMatrix(sample,side,slot.anchorDepth,y,1,start,3,8);
+    near(matrix[0],1,'closed ink keeps natural horizontal glyph spacing');near(matrix[5],1,'closed ink keeps natural vertical glyph spacing');
+    for(let x=0;x<=3;x+=.25)for(let yy=0;yy<=8;yy+=.5){const ink=K.transformPoint(matrix,x,yy),paper=sample(side,slot.anchorDepth+start+x,y-4+yy);assert.ok(ink.z>=paper.z+.299999,'solid triangle crosses printed ink');}
+   }
+  }
+ }
+ assert.equal(f.nodes.length,initialNodes);assert.ok(f.nodes.filter(n=>n.className==='pbi-ink-strip').every(n=>!n.hidden));
+ f.index.setDigital(.2);assert.ok(f.nodes.filter(n=>n.className==='pbi-ink-strip').every(n=>n.hidden));
+ f.index.setDigital(0);f.index.setSurfaceFrame({material:material(1232),close:0,fanLeft:1});assert.ok(f.nodes.filter(n=>n.className==='pbi-ink-strip').every(n=>n.hidden));
+});
 test('destroy removes only the owned index surface and event listeners',()=>{
  const f=fixture();f.index.destroy();assert.equal(f.host.children.length,0);assert.equal(Object.keys(f.root.handlers).length,0);assert.equal(f.index.setDigital(.5).destroyed,true);
 });
-console.log(JSON.stringify({bookIndexScenarios:checks,books:66,groups:22,physicalDepth:36,persistentFragments:132,closedSplitInvariant:true}));
+console.log(JSON.stringify({bookIndexScenarios:checks,books:66,groups:22,physicalDepth:36,persistentFragments:132,closedSplitInvariant:true,recessedGroups:22,sideSpecificInteraction:true}));
