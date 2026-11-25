@@ -117,27 +117,57 @@ test('cross-page copy stitches the selected split verse only once in canonical o
   assert.equal(quote,S.physicalClipboardQuote([...a.selected.values()],a.bookName,a.units,db,first));
   assert.match(quote,/7:55-56/);
 });
-test('main and float update one chapter row and keep the main active record independent',()=>{
+test('a reading trail follows committed turns; jumps reuse only unpinned chapter records',()=>{
   const storage=events(),model=H.createModel({storage,pageCount:1272,byChapter:true,books:db.books});
-  const one=model.start(genesis('1:1',9)); model.visitFloat(genesis('1:5',9));
-  const three=model.jump(genesis('3:1'));const two=model.visitFloat(genesis('2:1'));
-  assert.equal(model.current(),three.id);
-  assert.deepEqual(model.list().map(r=>r.id),[two.id,three.id,one.id]);
-  const overlap=model.visitFloat(genesis('3:5'));
-  assert.equal(overlap.id,three.id);assert.equal(overlap.anchor.ref,'3:5');assert.equal(model.current(),three.id);
-  assert.deepEqual(model.list().map(r=>r.id),[three.id,two.id,one.id]);
-  const mainNext=model.advance(genesis('4:6',12));assert.equal(model.current(),mainNext.id);
-  model.pin(one.id,true);model.visitFloat(genesis('2:8'));
-  assert.equal(model.list()[0].id,one.id);assert.equal(model.list()[1].id,two.id);
-  model.remove(three.id);model.visitFloat(genesis('3:9'));model.undo();
-  assert.equal(model.list().filter(r=>r.anchor.ref.startsWith('3:')).length,1);
+  const kings=(chapter,page)=>({bookCode:'1KI',bookName:'列王纪上',ref:chapter+':1',page});
+  const pinned=model.jump(kings(15,100));model.pin(pinned.id,true);
+  for(let chapter=16;chapter<=20;chapter++){
+    const next=model.advance(kings(chapter,100+chapter));
+    assert.equal(next.id,pinned.id);
+    assert.equal(next.anchor.ref,chapter+':1');
+  }
+  assert.equal(model.list().length,1);
+  model.jump(genesis('22:1',55));
+  const other=model.jump(kings(20,120));
+  assert.notEqual(other.id,pinned.id);
+  assert.deepEqual(model.list().filter(r=>r.bookCode==='1KI').map(r=>r.id),[pinned.id,other.id]);
+  const genesis22=model.jump(genesis('22:1',55));
+  model.jump(kings(18,118));
+  assert.equal(model.jump(genesis('22:8',56)).id,genesis22.id);
+  assert.equal(model.list().filter(r=>r.bookCode==='GEN'&&r.ref.startsWith('22:')).length,1);
+  assert.equal(model.jump(kings(20,120),pinned.id).id,pinned.id);
+  assert.equal(model.jump(kings(20,120)).id,other.id);
+  assert.equal(model.current(),other.id);
+  assert.equal(model.visitFloat(genesis('22:9',56)).id,genesis22.id);
+  assert.equal(model.current(),other.id);
+  const restored=H.createModel({storage,pageCount:1272,byChapter:true,books:db.books});
+  restored.start(kings(20,120));
+  assert.equal(restored.current(),other.id);
+  assert.equal(restored.get(pinned.id).pinned,true);
   assert.ok(storage.getItem(H.COMPARE_KEY));assert.equal(storage.getItem(H.KEY),null);
 });
-test('new branch imports old history without rewriting it and merges duplicates and pins',()=>{
+test('import preserves every physical record, including pinned and ordinary copies at one chapter',()=>{
   const storage=events(),old=H.createModel({storage,pageCount:1272});
   const one=old.jump(genesis('1:1',9));old.pin(one.id,true);const recent=old.jump(genesis('1:3',9));
   const before=storage.getItem(H.KEY);
   const model=H.createModel({storage,pageCount:1272,byChapter:true,books:db.books});
-  assert.equal(model.list().length,1);assert.equal(model.list()[0].id,recent.id);assert.equal(model.list()[0].pinned,true);
-  assert.equal(model.list()[0].anchor.ref,'1:3');assert.equal(storage.getItem(H.KEY),before);
+  assert.deepEqual(model.list().map(e=>e.id),[one.id,recent.id]);
+  assert.equal(model.list()[0].pinned,true);
+  assert.equal(model.list()[1].pinned,false);
+  assert.equal(model.jump(genesis('1:9',9)).id,recent.id);
+  assert.equal(storage.getItem(H.KEY),before);
+});
+test('overlapping ordinary bookmarks survive reload; a deliberate jump reactivates the recent copy',()=>{
+  const storage=events(),model=H.createModel({storage,pageCount:1272,byChapter:true,books:db.books});
+  model.jump(genesis('21:1',50));
+  const first=model.jump(genesis('22:1',55));
+  model.jump(genesis('20:1',45));
+  model.advance(genesis('22:9',56));
+  const copy=model.get(model.current());
+  assert.notEqual(copy.id,first.id);
+  assert.equal(model.list().filter(r=>r.ref.startsWith('22:')).length,2);
+  const reopened=H.createModel({storage,pageCount:1272,byChapter:true,books:db.books});
+  assert.equal(reopened.list().filter(r=>r.ref.startsWith('22:')).length,2);
+  assert.equal(reopened.jump(genesis('22:2',55)).id,copy.id);
+  assert.equal(reopened.jump(genesis('22:1',55),first.id).id,first.id);
 });

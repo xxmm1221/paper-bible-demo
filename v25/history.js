@@ -41,24 +41,21 @@
     const matches=(a,b)=>byChapter&&identity(a)&&identity(b)?identity(a)===identity(b):same(a,b);
     let raw=null,state=fresh(),current=null,removed=null;
     const find=id=>state.items.find(e=>e.id===id);
-    const findChapter=loc=>state.items.find(e=>matches(e.anchor||e,loc));
-    function mergeChapters(){
-      const seen=new Map();
-      state.items=state.items.filter(e=>{
-        const chapter=identity(e.anchor||e);if(!chapter)return true;
-        const prior=seen.get(chapter);
-        if(!prior){seen.set(chapter,e);return true;}
-        if(e.pinned){prior.pinned=true;prior.pinOrder=Math.max(prior.pinOrder||0,e.pinOrder||0);}
-        if(state.activeId===e.id)state.activeId=prior.id;
-        if(current===e.id)current=prior.id;
-        return false;
-      });
+    // A pin is an independent physical copy, even when its bookmark happens
+    // to land on the same chapter as an ordinary recent record.
+    const findChapter=loc=>state.items.find(e=>!e.pinned&&matches(e,loc));
+    function restoreBookmarks(){
+      for(const e of state.items){
+        // Older trails kept their starting point in `anchor`. The visible
+        // bookmark is always the last committed page, not that old start.
+        e.anchor={page:e.page,bookName:e.bookName,bookCode:e.bookCode,ref:e.ref};
+      }
     }
     function pull(){
       let next;try{next=storage?.getItem(key)??null;}catch{return;}
       if(next===raw)return;
       raw=next;state=decode(next,pageCount);
-      if(byChapter)mergeChapters();
+      if(byChapter)restoreBookmarks();
       if(current&&!find(current))current=null;
     }
     function save(){
@@ -74,7 +71,7 @@
     // Import once without writing into the production reader's storage.
     try{if(storage?.getItem(key)==null){
       const old=(byChapter&&storage?.getItem(KEY))||storage?.getItem(LEGACY);
-      if(old){state=decode(old,pageCount);if(byChapter)mergeChapters();save();}
+      if(old){state=decode(old,pageCount);if(byChapter)restoreBookmarks();save();}
     }}catch{}
     pull();
     function start(loc){
@@ -83,7 +80,7 @@
       // selected chapter on that page. Do not overwrite its more exact anchor.
       const active=find(state.activeId);
       if(byChapter){
-        const found=(active&&matches(active.anchor||active,loc)?active:findChapter(loc));
+        const found=(active&&active.page===loc.page?active:findChapter(loc));
         if(!found)return visit(loc,true);
         current=state.activeId=found.id;save();return copy(found);
       }
@@ -92,10 +89,11 @@
     }
     function advance(loc){
       pull();loc=location(loc,pageCount);const e=find(current);if(!loc)return null;
-      if(byChapter&&(!e||!matches(e.anchor||e,loc)))return visit(loc,true);
+      if(byChapter&&!e)return visit(loc,true);
       if(!e)return null;
       if(same(e,loc)&&state.activeId===current)return copy(e);
-      Object.assign(e,loc);state.activeId=e.id;save();return copy(e);
+      Object.assign(e,loc);if(byChapter)e.anchor={...loc};
+      state.activeId=e.id;save();return copy(e);
     }
     function visit(loc,main,known){
       const e=known||findChapter(loc)||{id:'r'+(++state.serial),pinned:false};
@@ -113,7 +111,7 @@
       if(byChapter){
         const requested=requestedId==null?null:find(requestedId);
         if(requestedId!=null&&!requested)return null;
-        return visit(loc,true,requested&&matches(requested.anchor||requested,loc)?requested:null);
+        return visit(loc,true,requested);
       }
       let e;
       if(requestedId!=null){
@@ -133,7 +131,10 @@
     }
     function pickVerse(loc){
       pull();loc=location(loc,pageCount);if(!loc)return null;
-      if(byChapter)return visit(loc,true);
+      if(byChapter){
+        const e=find(current);
+        return e?visit(loc,true,e):visit(loc,true);
+      }
       const e=find(current);if(!e)return jump(loc);
       Object.assign(e,loc);e.anchor={...loc};state.activeId=e.id;save();return copy(e);
     }
@@ -155,13 +156,6 @@
     function undo(){
       pull();if(!removed)return false;const {entry,index}=removed;removed=null;
       if(find(entry.id))return false;
-      if(byChapter){
-        const existing=findChapter(entry.anchor||entry);
-        if(existing){
-          if(entry.pinned){existing.pinned=true;existing.pinOrder=Math.max(existing.pinOrder||0,entry.pinOrder||0);}
-          save();return true;
-        }
-      }
       state.items.splice(Math.min(index,state.items.length),0,entry);trim(entry.id);save();
       return true; // Restore the record, not the reading position.
     }
